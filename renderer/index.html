@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<title>Photo Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <button class="btn icon" id="toggleLeft" title="顯示／隱藏左側欄">☰</button>
+  <span class="logo">◐ Photo Lab</span>
+  <button class="btn icon" id="prev" title="上一張（←）" disabled>‹</button>
+  <span class="file" id="fileLabel">尚未開啟照片</span>
+  <button class="btn icon" id="next" title="下一張（→）" disabled>›</button>
+  <span class="spacer"></span>
+  <button class="btn" id="openFiles" title="Ctrl+O">開啟照片</button>
+  <button class="btn" id="openFolder" title="Ctrl+Shift+O">開啟資料夾</button>
+  <button class="btn pri" id="exportBtn" title="Ctrl+Shift+E" disabled>匯出…</button>
+</header>
+<main>
+  <aside class="left" id="left">
+    <h4>歷史紀錄</h4>
+    <div id="hist"></div>
+    <div class="exif" id="exif"></div>
+  </aside>
+  <section class="stage">
+    <div class="view" id="view">
+      <div class="empty" id="empty">
+        <div class="empty-icon">◐</div>
+        <div>把照片拖進來，或按「開啟照片」</div>
+        <div class="hint">支援 JPEG、PNG、WebP 與相機 RAW（CR3、CR2、NEF、ARW、DNG、RAF…）</div>
+      </div>
+      <div class="cw" id="cw" hidden>
+        <canvas id="img"></canvas>
+        <canvas id="overlay"></canvas>
+        <div class="badge" id="badge">原圖</div>
+      </div>
+      <div class="loading" id="loading" hidden><div class="spin"></div><span id="loadingText">載入中…</span></div>
+    </div>
+    <div class="tools" id="tools">
+      <button class="btn" id="cropBtn" title="R" disabled>⛶ 裁切</button>
+      <span class="croprow" id="cropRow">
+        <select class="btn" id="ratio"></select>
+        <button class="btn" id="flip" title="直式／橫式互換（X）">⇄ 直橫</button>
+        <span class="lbl">拉直</span><input type="range" id="angle" min="-45" max="45" step="0.1" value="0"><output id="o_angle">0°</output>
+        <button class="btn" id="cropReset" title="重設裁切">重設</button>
+      </span>
+      <span class="sep"></span>
+      <button class="btn" id="baBtn" title="按住看原圖（\）" disabled>◧ 原圖</button>
+      <span class="sep"></span>
+      <button class="btn" id="undo" title="Ctrl+Z" disabled>↶ 復原</button>
+      <button class="btn" id="redo" title="Ctrl+Y" disabled>↷ 重做</button>
+      <span class="sep"></span>
+      <button class="btn" id="resetAll" disabled>全部重設</button>
+    </div>
+  </section>
+  <aside class="right" id="right">
+    <div class="histo"><h4>直方圖</h4><canvas id="hg" width="552" height="180"></canvas>
+      <div class="hinfo"><span id="shot"></span><span id="clip"></span></div></div>
+    <details open><summary>基本</summary><div class="sec" id="basic"></div></details>
+    <details open><summary>效果</summary><div class="sec" id="fx"></div></details>
+    <div class="tip">雙擊拉桿或名稱可歸零</div>
+  </aside>
+</main>
+
+<dialog id="exportDlg">
+  <form method="dialog" id="exportForm">
+    <h3>匯出</h3>
+    <label class="f"><span>格式</span>
+      <select id="exFmt"><option value="jpg">JPEG</option><option value="png">PNG</option></select></label>
+    <label class="f" id="exQRow"><span>品質</span><input type="range" id="exQ" min="50" max="100" value="90"><output id="exQo">90</output></label>
+    <label class="f"><span>尺寸</span>
+      <select id="exSize"><option value="0">原尺寸</option><option value="4096">長邊 4096</option><option value="2048">長邊 2048</option><option value="1080">長邊 1080</option><option value="custom">自訂長邊…</option></select>
+      <input type="number" id="exCustom" min="100" max="20000" value="3000" hidden></label>
+    <label class="f"><span>檔名後綴</span><input type="text" id="exSuffix" value="_edit" maxlength="40"></label>
+    <div class="f"><span>存到</span>
+      <div class="dest"><label><input type="radio" name="exDest" value="same" checked> 跟原檔同一個資料夾</label>
+        <label><input type="radio" name="exDest" value="custom"> <button type="button" class="btn sm" id="exPick">選擇資料夾…</button></label>
+        <div class="path" id="exDir"></div></div></div>
+    <div class="exinfo" id="exInfo"></div>
+    <div class="actions"><button type="button" class="btn" id="exCancel">取消</button><button type="submit" class="btn pri" id="exGo">匯出</button></div>
+  </form>
+</dialog>
+<div class="toast" id="toast" hidden></div>
+<script type="module" src="app.js"></script>
+</body>
+</html>
