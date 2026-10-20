@@ -3,6 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron';
 import fs from 'node:fs/promises';
 import { appendFileSync } from 'node:fs';
 import path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -31,11 +32,13 @@ async function listFolder(dir) {
     .map((n) => path.join(dir, n));
 }
 
-async function uniquePath(dir, base, ext) {
-  for (let i = 0; ; i++) {
+// 'wx'＝只能新建：路徑已存在（含別人放的符號連結）就失敗，不會順著連結寫到別處
+async function writeNew(dir, base, ext, bytes) {
+  for (let i = 0; i < 1000; i++) {
     const p = path.join(dir, `${base}${i ? `-${i}` : ''}${ext}`);
-    try { await fs.access(p); } catch { return p; }
+    try { await fs.writeFile(p, bytes, { flag: 'wx' }); return p; } catch (e) { if (e.code !== 'EEXIST') throw e; }
   }
+  throw new Error('同名檔太多，請換個檔名後綴');
 }
 
 protocol.registerSchemesAsPrivileged([
@@ -96,16 +99,16 @@ if (!gotTheLock) {
       const buf = await fs.readFile(mustImage(p));
       return new Uint8Array(buf.buffer, buf.byteOffset, buf.byteLength);
     });
-    ipcMain.handle('stat-file', async (_e, p) => (await fs.stat(mustImage(p))).size);
     ipcMain.handle('sidecar-read', async (_e, p) => {
       try { return JSON.parse(await fs.readFile(mustImage(p) + SIDECAR, 'utf8')); } catch { return null; }
     });
     ipcMain.handle('sidecar-write', async (_e, p, data) => {
       const target = mustImage(p) + SIDECAR;
       if (data == null) { await fs.rm(target, { force: true }); return true; } // 全部回到預設就不留設定檔
-      const tmp = target + '.tmp';
-      await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
-      await fs.rename(tmp, target);
+      try { if ((await fs.lstat(target)).isSymbolicLink()) throw new Error('設定檔是符號連結，拒絕覆寫'); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+      const tmp = `${target}.${randomUUID()}.tmp`;
+      await fs.writeFile(tmp, JSON.stringify(data, null, 2), { encoding: 'utf8', flag: 'wx' });
+      try { await fs.rename(tmp, target); } catch (e) { await fs.rm(tmp, { force: true }); throw e; }
       return true;
     });
     ipcMain.handle('choose-dir', async (_e, defaultPath) => {
@@ -115,9 +118,7 @@ if (!gotTheLock) {
     ipcMain.handle('export-save', async (_e, dir, base, ext, bytes) => {
       if (!path.isAbsolute(dir) || !['.jpg', '.png'].includes(ext) || /[\\/:*?"<>|]/.test(base)) throw new Error('匯出參數不正確');
       await fs.mkdir(dir, { recursive: true });
-      const out = await uniquePath(dir, base, ext);
-      await fs.writeFile(out, Buffer.from(bytes));
-      return out;
+      return writeNew(dir, base, ext, Buffer.from(bytes));
     });
     ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
     ipcMain.on('log', (_e, msg) => log('renderer', msg));
