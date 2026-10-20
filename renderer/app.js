@@ -400,6 +400,7 @@ function exportSize() {
   return { w: Math.max(1, Math.round(w * k)), h: Math.max(1, Math.round(h * k)), fw: w, fh: h };
 }
 function refreshExport() {
+  if (!st.path) return;
   $('exQRow').style.display = $('exFmt').value === 'jpg' ? '' : 'none';
   $('exQo').textContent = $('exQ').value;
   $('exCustom').hidden = $('exSize').value !== 'custom';
