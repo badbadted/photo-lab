@@ -1,6 +1,6 @@
 // WebGL2 修圖管線：原圖放 GPU 貼圖（線性光），所有調整在 shader 裡一次算完。
 // 螢幕預覽、直方圖、全尺寸匯出共用同一支 shader，保證「看到的＝匯出的」。
-import { resolveStyle } from './styles.js';
+import { resolveStyle } from './styles.js?v=mvhpsqfc';
 
 // 拉桿 key 與範圍（跟 settings.js 的 ADJ 一致；風格疊上去後夾在範圍內）
 const RANGES = {

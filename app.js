@@ -1,12 +1,12 @@
 // Photo Lab 畫面邏輯
-import { Pipeline } from './pipeline.js';
-import { decode, decodeForFocus } from './decode.js';
-import { fmtShutter } from './exif.js';
-import { ADJ, GROUPS, SCHEMA_VERSION, defaults, clone, isDefault, sanitize, fmtValue, History } from './settings.js';
-import { RATIOS, ratioOf, fits, fitCrop, tryRect, rotatedBounds, resizeFromCorner, scaleCrop, defaultCrop } from './crop.js';
-import { STYLES, styleById, customStyles, getCustomStyles, setCustomStyles, captureStyle, adoptOrphan, describeStyle, isCustomId, sanitizeCustomStyle } from './styles.js';
-import { autoTone, autoWhiteBalance, pixelStats, untouchedForAuto } from './auto.js';
-import { FOCUS_LONG, CLASSES, edgeScore, lumaFromRGBA, referenceScore, classify, clarity } from './focus.js';
+import { Pipeline } from './pipeline.js?v=mvhpsqfc';
+import { decode, decodeForFocus } from './decode.js?v=mvhpsqfc';
+import { fmtShutter } from './exif.js?v=mvhpsqfc';
+import { ADJ, GROUPS, SCHEMA_VERSION, defaults, clone, isDefault, sanitize, fmtValue, History } from './settings.js?v=mvhpsqfc';
+import { RATIOS, ratioOf, fits, fitCrop, tryRect, rotatedBounds, resizeFromCorner, scaleCrop, defaultCrop } from './crop.js?v=mvhpsqfc';
+import { STYLES, styleById, customStyles, getCustomStyles, setCustomStyles, captureStyle, adoptOrphan, describeStyle, isCustomId, sanitizeCustomStyle } from './styles.js?v=mvhpsqfc';
+import { autoTone, autoWhiteBalance, pixelStats, untouchedForAuto } from './auto.js?v=mvhpsqfc';
+import { FOCUS_LONG, CLASSES, edgeScore, lumaFromRGBA, referenceScore, classify, clarity } from './focus.js?v=mvhpsqfc';
 
 const $ = (id) => document.getElementById(id);
 const lab = window.lab;

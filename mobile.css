@@ -60,3 +60,33 @@ body.m button{font:inherit;color:inherit;background:none;border:0;cursor:pointer
 .m-sh-err{color:#ff6b6b;font-size:12px;min-height:16px}
 .m-input{width:100%;box-sizing:border-box;background:var(--p2);color:var(--t1);border:1px solid var(--line);border-radius:10px;padding:10px 12px;font:inherit;font-size:16px}
 .m-toast{position:fixed;left:16px;right:16px;bottom:120px;background:#111214;border:1px solid var(--line);border-radius:10px;padding:10px 14px;text-align:center;z-index:30;box-shadow:0 6px 24px #000a}
+/* 第二版：檔案資訊、調整分頁、裁切三種 */
+.m-info{flex:none;display:flex;justify-content:center;align-items:center;gap:6px;font-size:12px;color:var(--t2);padding:0 14px 4px;white-space:nowrap;overflow:hidden}
+.m-info span:last-child{overflow:hidden;text-overflow:ellipsis}
+.m-tag{flex:none;border-radius:4px;padding:0 6px;font-size:11px;font-weight:700;letter-spacing:.5px;background:#3d3f45;color:#ddd}
+.m-tag.raw{background:#ffb020;color:#1e1f22}
+.m-tag.pv{background:#3d3f45;color:#ffb020;box-shadow:inset 0 0 0 1px #ffb020}
+.m-dims{position:absolute;left:50%;bottom:8px;transform:translateX(-50%);background:#000b;border-radius:4px;padding:1px 8px;font-size:12px;line-height:1.6;white-space:nowrap;pointer-events:none}
+.m-seg{display:flex;margin:2px 14px 8px;background:var(--p2);border-radius:9px;padding:2px}
+.m-seg button{flex:1;text-align:center;padding:5px 0!important;border-radius:7px;font-size:13px;color:var(--t2)!important}
+.m-seg button.on{background:#4a4d55!important;color:var(--t1)!important}
+.m-autob{display:block;width:calc(100% - 28px);margin:0 14px 6px;border:1px solid var(--line)!important;border-radius:9px;padding:6px!important;font-size:13px}
+#mSliders{max-height:200px;overflow-y:auto}
+.m-sl{display:grid;grid-template-columns:62px 1fr 48px;gap:10px;align-items:center;padding:2px 16px;font-size:13px}
+.m-sl span{color:var(--t2)}
+.m-sl output{text-align:right;color:var(--t2);font-variant-numeric:tabular-nums}
+.m-sl.ch span,.m-sl.ch output{color:var(--t1)}
+.m-sl input{width:100%;accent-color:var(--ac);height:28px;margin:0}
+.m-sl input.temp,.m-sl input.tint{appearance:none;-webkit-appearance:none;height:5px;border-radius:4px}
+.m-sl input.temp{background:linear-gradient(90deg,#4f7dff,#ddd,#ffb34f)}
+.m-sl input.tint{background:linear-gradient(90deg,#3fbf5f,#ddd,#d04fd0)}
+.m-sl input.temp::-webkit-slider-thumb,.m-sl input.tint::-webkit-slider-thumb{-webkit-appearance:none;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 0 0 1px #0006}
+.m-chip small{display:block;font-size:10px;color:#6f727a;line-height:1.1}
+.m-custom{display:flex;gap:6px;align-items:center;padding:0 14px 8px;font-size:13px;color:var(--t2)}
+.m-custom input{width:80px;background:var(--p2);border:1px solid var(--line);border-radius:7px;color:var(--t1);padding:5px 6px;font:inherit;font-size:16px;text-align:center}
+.m-tools{display:flex;gap:10px;align-items:center;padding:0 14px 8px;font-size:13px;color:var(--t2)}
+.m-tools input{flex:1;accent-color:var(--ac);height:28px}
+.m-tools output{width:44px;text-align:right;font-variant-numeric:tabular-nums}
+.m-flip{flex:none;border:1px solid var(--ac)!important;color:var(--ac)!important;border-radius:16px;padding:4px 12px!important;font-size:13px}
+.m-flip:disabled{opacity:.35}
+.m-tab{padding:4px 12px}
