@@ -3,7 +3,7 @@ import { app, BrowserWindow, dialog, ipcMain, protocol, shell } from 'electron';
 import fs from 'node:fs/promises';
 import { appendFileSync } from 'node:fs';
 import path from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
@@ -132,6 +132,25 @@ if (!gotTheLock) {
       try { await fs.rename(tmp, target); } catch (e) { await fs.rm(tmp, { force: true }); throw e; }
       return true;
     });
+    // 對焦分析結果：每個資料夾一個快取檔，放在 App 自己的資料夾，不在照片資料夾留東西
+    const focusFile = (dir) => {
+      if (typeof dir !== 'string' || !path.isAbsolute(dir)) throw new Error('資料夾路徑不正確');
+      return path.join(app.getPath('userData'), 'focus', createHash('sha1').update(path.normalize(dir).toLowerCase()).digest('hex') + '.json');
+    };
+    ipcMain.handle('focus-read', async (_e, dir) => {
+      try { const d = JSON.parse(await fs.readFile(focusFile(dir), 'utf8')); return d && typeof d.entries === 'object' ? d.entries : {}; } catch { return {}; }
+    });
+    ipcMain.handle('focus-write', async (_e, dir, entries) => {
+      if (!entries || typeof entries !== 'object') throw new Error('對焦資料格式不正確');
+      const target = focusFile(dir), tmp = `${target}.${randomUUID()}.tmp`;
+      await fs.mkdir(path.dirname(target), { recursive: true });
+      await fs.writeFile(tmp, JSON.stringify({ app: 'photo-lab', version: 1, dir, entries }), { encoding: 'utf8', flag: 'wx' });
+      try { await fs.rename(tmp, target); } catch (e) { await fs.rm(tmp, { force: true }); throw e; }
+      return true;
+    });
+    ipcMain.handle('stat-files', async (_e, paths) => Promise.all((Array.isArray(paths) ? paths : []).map(async (p) => {
+      try { const s = await fs.stat(mustImage(p)); return { size: s.size, mtime: Math.round(s.mtimeMs) }; } catch { return null; }
+    })));
     ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
     ipcMain.on('log', (_e, msg) => log('renderer', msg));
 

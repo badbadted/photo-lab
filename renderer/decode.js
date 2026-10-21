@@ -34,3 +34,40 @@ export async function decode(path, bytes) {
   const info = type === 'image/jpeg' ? infoFromExif(readJpegExif(bytes)) : null;
   return { kind: 'bitmap', bitmap, width: bitmap.width, height: bitmap.height, info };
 }
+
+/**
+ * 對焦分析用：解成長邊不超過 maxLong 的 RGBA。
+ * RAW 優先用檔案內嵌的預覽 JPEG（快很多），太小才整張解（半尺寸）。
+ */
+export async function decodeForFocus(path, bytes, maxLong) {
+  let blob = null;
+  if (isRaw(path)) {
+    const raw = new LibRaw();
+    try {
+      await raw.open(bytes, { halfSize: true, outputBps: 8, useCameraWb: true });
+      const th = await raw.thumbnailData().catch(() => null);
+      if (th && th.format === 'jpeg' && Math.max(th.width, th.height) >= 1000) blob = new Blob([th.data], { type: 'image/jpeg' });
+      else {
+        const img = await raw.imageData();
+        if (!img || img.colors !== 3) throw new Error('RAW 解碼結果格式不符');
+        const n = img.width * img.height, rgba = new Uint8ClampedArray(n * 4), d = img.data;
+        for (let i = 0; i < n; i++) { rgba[i * 4] = d[i * 3]; rgba[i * 4 + 1] = d[i * 3 + 1]; rgba[i * 4 + 2] = d[i * 3 + 2]; rgba[i * 4 + 3] = 255; }
+        return scaleRGBA(await createImageBitmap(new ImageData(rgba, img.width, img.height)), maxLong);
+      }
+    } finally { raw.dispose(); }
+  } else {
+    const type = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[extOf(path)];
+    blob = new Blob([bytes], { type });
+  }
+  return scaleRGBA(await createImageBitmap(blob, { imageOrientation: 'from-image' }), maxLong);
+}
+
+async function scaleRGBA(bmp, maxLong) {
+  const k = Math.min(1, maxLong / Math.max(bmp.width, bmp.height));
+  const w = Math.max(1, Math.round(bmp.width * k)), h = Math.max(1, Math.round(bmp.height * k));
+  const oc = new OffscreenCanvas(w, h), g = oc.getContext('2d', { willReadFrequently: true });
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(bmp, 0, 0, w, h);
+  bmp.close();
+  return { px: g.getImageData(0, 0, w, h).data, w, h };
+}

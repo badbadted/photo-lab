@@ -1,11 +1,12 @@
 // Photo Lab 畫面邏輯
 import { Pipeline } from './pipeline.js';
-import { decode } from './decode.js';
+import { decode, decodeForFocus } from './decode.js';
 import { fmtShutter } from './exif.js';
 import { ADJ, GROUPS, SCHEMA_VERSION, defaults, clone, isDefault, sanitize, fmtValue, History } from './settings.js';
 import { RATIOS, ratioOf, fits, fitCrop, tryRect, rotatedBounds, resizeFromCorner, scaleCrop, defaultCrop } from './crop.js';
 import { STYLES, styleById, customStyles, getCustomStyles, setCustomStyles, captureStyle, adoptOrphan, describeStyle, isCustomId, sanitizeCustomStyle } from './styles.js';
 import { autoTone, autoWhiteBalance, pixelStats, untouchedForAuto } from './auto.js';
+import { FOCUS_LONG, CLASSES, edgeScore, lumaFromRGBA, referenceScore, classify, clarity } from './focus.js';
 
 const $ = (id) => document.getElementById(id);
 const lab = window.lab;
@@ -522,6 +523,7 @@ function setBusy(text) {
 async function openList(files, idx = 0) {
   if (!files.length) return;
   st.files = files;
+  focusReset();
   await loadIndex(idx);
 }
 
@@ -552,7 +554,7 @@ async function loadIndex(idx) {
     st.histories.set(path, st.hist);
     if (st.histories.size > 30) st.histories.delete(st.histories.keys().next().value);
     $('empty').hidden = true; $('cw').hidden = false;
-    for (const id of ['cropBtn', 'baBtn', 'resetAll', 'exportBtn', 'autoAll', 'autoWb', 'saveStyleBtn']) $(id).disabled = false;
+    for (const id of ['cropBtn', 'baBtn', 'resetAll', 'exportBtn', 'autoAll', 'autoWb', 'saveStyleBtn', 'focusBtn']) $(id).disabled = false;
     $('autoNote').textContent = '分析照片亮度分布與色偏，自動設定曝光、亮部、陰影、白色、黑色、白平衡';
     setCropMode(false);
     syncUI(); drawHistory(); updateHeader(path); renderInfo(); layout();
@@ -571,6 +573,7 @@ function updateHeader(path) {
     ? `${nameOf(path)}${st.path === path && st.W ? `　·　${st.W}×${st.H}` : ''}${n > 1 ? `　·　${st.idx + 1} / ${n}` : ''}`
     : '尚未開啟照片';
   $('prev').disabled = st.idx <= 0;
+  renderFocusBadge();
   $('next').disabled = st.idx < 0 || st.idx >= n - 1;
 }
 
@@ -721,11 +724,152 @@ window.addEventListener('keydown', (e) => {
   else if (k === '\\') { if (!e.repeat) setOrig(true); }
   else if (!onRange && k === 'arrowleft') loadIndex(st.idx - 1);
   else if (!onRange && k === 'arrowright') loadIndex(st.idx + 1);
+  else if (k === '1' || k === '2' || k === '3') setFocusOverride(st.path, ['ok', 'mid', 'bad'][+k - 1]);
 });
 window.addEventListener('keyup', (e) => { if (e.key === '\\') setOrig(false); });
 window.addEventListener('blur', () => setOrig(false));
 new ResizeObserver(() => layout()).observe($('view'));
 window.addEventListener('beforeunload', () => { flushSave(); });
 
+// ---------- 對焦分類 ----------
+// fz.entries：路徑 → { score, size, mtime, override }；分類即時從分數算，手動改的優先
+const fz = { entries: {}, running: false, stop: false, open: { mid: true } };
+const ORDER = ['ok', 'mid', 'bad'];
+
+function focusReset() {
+  fz.stop = true;
+  fz.entries = {}; fz.open = { mid: true };
+  $('focusPanel').hidden = true; $('focusProg').hidden = true;
+  // 開資料夾時自動載入以前分析過的結果（檔案沒變才算數）
+  loadFocusCache().catch((e) => lab.log(`focus cache: ${e}`));
+}
+const dirsOf = (files) => [...new Set(files.map(dirOf))];
+
+async function loadFocusCache() {
+  const files = st.files, stats = await lab.statFiles(files);
+  for (const dir of dirsOf(files)) {
+    const saved = await lab.focusRead(dir);
+    if (st.files !== files) return; // 讀的時候換了資料夾
+    files.forEach((p, i) => {
+      const e = saved[nameOf(p)];
+      if (e && stats[i] && e.size === stats[i].size && e.mtime === stats[i].mtime) fz.entries[p] = e;
+    });
+  }
+  if (Object.keys(fz.entries).length) { $('focusPanel').hidden = false; renderFocus(); }
+}
+
+async function saveFocusCache() {
+  for (const dir of dirsOf(st.files)) {
+    const entries = {};
+    for (const p of st.files) if (dirOf(p) === dir && fz.entries[p]) entries[nameOf(p)] = fz.entries[p];
+    try { await lab.focusWrite(dir, entries); } catch (e) { lab.log(`focus write: ${e}`); }
+  }
+}
+
+const focusRef = () => referenceScore(st.files.map((f) => fz.entries[f]?.score || 0));
+function focusInfo(p, ref = focusRef()) {
+  const e = fz.entries[p];
+  if (!e) return null;
+  return { cls: classify(e.score, ref, e.override), clarity: clarity(e.score, ref), manual: !!e.override };
+}
+
+function renderFocusBadge() {
+  const b = $('focusBadge'), p = st.files[st.idx];
+  const info = p && focusInfo(p);
+  if (!info) {
+    b.hidden = !(p && fz.running);
+    b.className = 'fbadge wait'; b.textContent = '尚未分析';
+    return;
+  }
+  b.hidden = false;
+  b.className = 'fbadge ' + info.cls;
+  b.textContent = `${CLASSES[info.cls]}${info.manual ? '（手動）' : `　清晰度 ${info.clarity}`}`;
+}
+
+function renderFocus() {
+  renderFocusBadge();
+  const groups = { ok: [], mid: [], bad: [] }, ref = focusRef();
+  st.files.forEach((p, i) => { const f = focusInfo(p, ref); if (f) groups[f.cls].push({ p, i, ...f }); });
+  const color = { ok: '#3fb950', mid: '#d29922', bad: '#f85149' };
+  const box = $('focusGroups');
+  box.replaceChildren(...ORDER.map((c) => {
+    const g = document.createElement('div'); g.className = 'fgrp';
+    const head = document.createElement('div'); head.className = 'fgh';
+    const name = document.createElement('span');
+    const dot = document.createElement('i'); dot.className = 'fdot'; dot.style.background = color[c];
+    name.append(dot, CLASSES[c]);
+    const cnt = document.createElement('b'); cnt.textContent = `${groups[c].length} ${groups[c].length ? (fz.open[c] ? '▾' : '▸') : ''}`;
+    head.append(name, cnt);
+    head.onclick = () => { fz.open[c] = !fz.open[c]; renderFocus(); };
+    g.append(head);
+    if (fz.open[c] && groups[c].length) {
+      const list = document.createElement('div'); list.className = 'flist';
+      for (const it of groups[c]) {
+        const row = document.createElement('div');
+        row.textContent = nameOf(it.p);
+        const em = document.createElement('em'); em.textContent = it.manual ? '手動' : it.clarity;
+        if (it.manual) em.className = 'man';
+        row.append(em);
+        if (it.i === st.idx) row.className = 'cur';
+        row.onclick = () => loadIndex(it.i);
+        list.append(row);
+      }
+      g.append(list);
+    }
+    return g;
+  }));
+}
+
+function setFocusOverride(p, cls) {
+  if (!p) return;
+  const e = fz.entries[p] || (fz.entries[p] = { score: 0, size: 0, mtime: 0 });
+  e.override = cls;
+  $('focusPanel').hidden = false;
+  renderFocus(); saveFocusCache();
+}
+$('focusBadge').onclick = () => {
+  const p = st.files[st.idx], info = p && focusInfo(p);
+  if (!info) return;
+  setFocusOverride(p, ORDER[(ORDER.indexOf(info.cls) + 1) % 3]);
+};
+
+async function runFocus() {
+  if (fz.running) return;
+  const files = st.files; // 用同一個陣列參照判斷「中途換了資料夾」，不能複製
+  fz.running = true; fz.stop = false;
+  $('focusPanel').hidden = false; $('focusProg').hidden = false; $('focusBtn').disabled = true;
+  const stats = await lab.statFiles(files);
+  let done = 0, failed = 0, lastSave = performance.now();
+  const step = () => { $('focusProgText').textContent = `分析中 ${done} / ${files.length}${failed ? `（${failed} 張讀不到）` : ''}`; $('focusBar').style.width = `${(done / files.length) * 100}%`; };
+  step();
+  for (let i = 0; i < files.length && !fz.stop; i++) {
+    const p = files[i], old = fz.entries[p], s = stats[i];
+    if (old && old.score > 0 && s && old.size === s.size && old.mtime === s.mtime) { done++; step(); continue; }
+    try {
+      const bytes = await lab.readFile(p);
+      const { px, w, h } = await decodeForFocus(p, bytes, FOCUS_LONG);
+      const score = edgeScore(lumaFromRGBA(px, w * h), w, h);
+      fz.entries[p] = { score: +score.toFixed(4), size: s?.size || 0, mtime: s?.mtime || 0, ...(old?.override ? { override: old.override } : {}) };
+    } catch (e) { failed++; lab.log(`focus ${p}: ${e}`); }
+    done++; step();
+    if (st.files !== files) break; // 中途換了資料夾
+    if (done % 4 === 0) renderFocus();
+    if (performance.now() - lastSave > 5000) { lastSave = performance.now(); saveFocusCache(); }
+    await new Promise((r) => setTimeout(r, 0)); // 讓畫面有空回應
+  }
+  fz.running = false;
+  $('focusProg').hidden = true; $('focusBtn').disabled = !st.S;
+  if (st.files === files) {
+    renderFocus(); await saveFocusCache();
+    if (!fz.stop) {
+      const ref = referenceScore(files.map((f) => fz.entries[f]?.score || 0)), n = { ok: 0, mid: 0, bad: 0 };
+      for (const f of files) if (fz.entries[f]) n[classify(fz.entries[f].score, ref, fz.entries[f].override)]++;
+      toast(`對焦分析完成：準焦 ${n.ok}、待確認 ${n.mid}、失焦 ${n.bad}${failed ? `，${failed} 張讀不到` : ''}`);
+    }
+  }
+}
+$('focusBtn').onclick = runFocus;
+$('focusStop').onclick = () => { fz.stop = true; $('focusProg').hidden = true; $('focusBtn').disabled = false; };
+
 // 測試用掛鉤（只讀狀態與呼叫既有流程）
-window.__lab = { st, openList, loadIndex, setCropMode, runExport, pipe, clone };
+window.__lab = { st, openList, loadIndex, setCropMode, runExport, pipe, clone, fz, runFocus };

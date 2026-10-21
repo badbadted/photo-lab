@@ -13,13 +13,22 @@
   <button class="btn icon" id="prev" title="上一張（←）" disabled>‹</button>
   <span class="file" id="fileLabel">尚未開啟照片</span>
   <button class="btn icon" id="next" title="下一張（→）" disabled>›</button>
+  <span class="fbadge" id="focusBadge" hidden title="點一下切換：準焦 → 待確認 → 失焦（鍵盤 1／2／3）"></span>
   <span class="spacer"></span>
+  <button class="btn" id="focusBtn" title="分析整個資料夾的對焦，分成準焦／待確認／失焦" disabled>◎ 檢查對焦</button>
   <button class="btn" id="openFiles" title="Ctrl+O">開啟照片</button>
   <button class="btn" id="openFolder" title="Ctrl+Shift+O">開啟資料夾</button>
   <button class="btn pri" id="exportBtn" title="Ctrl+Shift+E" disabled>匯出…</button>
 </header>
 <main>
   <aside class="left" id="left">
+    <div id="focusPanel" hidden>
+      <h4>對焦</h4>
+      <div class="fprog" id="focusProg" hidden><span id="focusProgText">分析中…</span><div class="fbar"><i id="focusBar"></i></div>
+        <span class="small">可以先修圖，分析在背景跑　</span><button class="btn sm" id="focusStop">停止</button></div>
+      <div id="focusGroups"></div>
+      <div class="small" id="focusHint">點類別展開清單，點檔名跳到那張。數字是清晰度（跟同資料夾最清楚的那群比）。</div>
+    </div>
     <h4>歷史紀錄</h4>
     <div id="hist"></div>
     <div class="exif" id="exif"></div>

@@ -13,6 +13,9 @@ contextBridge.exposeInMainWorld('lab', {
   reveal: (p) => ipcRenderer.invoke('reveal', p),
   stylesRead: () => ipcRenderer.invoke('styles-read'),
   stylesWrite: (list) => ipcRenderer.invoke('styles-write', list),
+  focusRead: (dir) => ipcRenderer.invoke('focus-read', dir),
+  focusWrite: (dir, entries) => ipcRenderer.invoke('focus-write', dir, entries),
+  statFiles: (paths) => ipcRenderer.invoke('stat-files', paths),
   pathForFile: (file) => webUtils.getPathForFile(file),
   log: (msg) => ipcRenderer.send('log', String(msg)),
 });
