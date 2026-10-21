@@ -27,6 +27,16 @@
 
 不在範圍（當初沒勾）：色調曲線、HSL、清晰度、銳利化／降噪、批次、圖庫縮圖牆、局部調整、鏡頭校正。
 
+## 網頁版（2026-10-21）
+
+- 網址：https://badbadted.github.io/photo-lab/（GitHub Pages，`gh-pages` 分支）
+- 螢幕寬 ≤ 820px 用手機版介面（`mobile.js`），較寬用電腦版完整介面（`app.js`）；修圖核心共用
+- 手機版：從相簿選照片（可多選、左右滑換張）→ 底部滑風格點一下套用、強度拉桿（「套風格時先自動校正」預設開）→ 裁切（比例照字面：4:5、9:16 直式，16:9 橫式；拖框、拉直）→「存到相簿」：處理完再點一次叫出分享選單，選「儲存影像」存成新照片；多張時可「套用到全部」一次存
+- 手機版照片長邊縮到 4096 內再修，RAW 用半尺寸解碼，省記憶體
+- 網頁版檔案存取（`platform.js`）：每個檔案給假路徑 `web:<組>/<檔名>`；調整設定與我的風格存瀏覽器 localStorage（以檔名＋大小＋修改時間辨識照片）；匯出改下載；對焦分類結果不快取
+- iOS 只允許「使用者剛點的那一下」叫出分享選單，所以處理完會再出一個「存到相簿（N 張）」按鈕讓使用者點
+- 發佈：`npm run deploy:web`（`build-web.mjs` 產生 `web-dist/`、把 RAW 模組路徑改成 `./vendor/libraw/`；`deploy-web.mjs` 用 git 底層指令把 `web-dist/` 接到 `gh-pages` 後面推上去，不需強制推送）
+
 ## 架構
 
 ```
@@ -42,6 +52,10 @@ renderer/
   focus.js     對焦評分與分類（純函式）
   decode.js    解碼：RAW 走 libraw-wasm（Web Worker），其他交給 Chromium
   exif.js      JPEG EXIF 讀取
+  entry.js     進入點：瀏覽器時掛網頁版檔案存取，依寬度載入手機版或電腦版
+  platform.js  網頁版的 window.lab（檔案、設定、風格存取）
+  mobile.js    手機版介面（mobile.css）
+scripts/       build-web.mjs、deploy-web.mjs
 test/          node --test 單元測試
 ```
 

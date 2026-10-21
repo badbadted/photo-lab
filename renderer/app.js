@@ -538,9 +538,9 @@ async function loadIndex(idx) {
     const bytes = await lab.readFile(path);
     if (token !== st.loadToken) return;
     const img = await decode(path, bytes);
-    if (token !== st.loadToken) { img.bitmap?.close(); return; }
+    if (token !== st.loadToken) { img.bitmap?.close?.(); return; }
     if (img.kind === 'raw') pipe.setLinear16(img.data, img.width, img.height);
-    else { pipe.setSRGB8(img.bitmap); img.bitmap.close(); }
+    else { pipe.setSRGB8(img.bitmap); img.bitmap.close?.(); }
     const W = img.width, H = img.height;
     const side = await lab.sidecarRead(path);
     if (token !== st.loadToken) return;
@@ -611,7 +611,7 @@ window.addEventListener('dragleave', (e) => { if (!e.relatedTarget) document.bod
 window.addEventListener('drop', async (e) => {
   e.preventDefault();
   document.body.classList.remove('drag');
-  const paths = [...e.dataTransfer.files].map((f) => lab.pathForFile(f)).filter((p) => /\.(jpe?g|png|webp|cr3|cr2|nef|arw|dng|raf|orf|rw2|pef|srw)$/i.test(p));
+  const paths = [...e.dataTransfer.files].map((f) => lab.pathForFile(f)).filter((p) => /\.(jpe?g|png|webp|heic|heif|cr3|cr2|nef|arw|dng|raf|orf|rw2|pef|srw)$/i.test(p));
   if (!paths.length) { toast('拖進來的不是支援的照片格式', true); return; }
   if (paths.length === 1) { const { list, i } = await siblingsOf(paths[0]); openList(list, i); } else openList(paths);
 });
@@ -677,7 +677,7 @@ async function runExport() {
     bmp.close();
     const blob = await oc.convertToBlob(exOpts.fmt === 'jpg' ? { type: 'image/jpeg', quality: exOpts.q / 100 } : { type: 'image/png' });
     const out = await lab.exportSave(dir, base, '.' + exOpts.fmt, new Uint8Array(await blob.arrayBuffer()));
-    toast(`已匯出 ${nameOf(out)}`, false, { label: '在資料夾中顯示', fn: () => lab.reveal(out) });
+    toast(lab.isWeb ? `已下載 ${nameOf(out)}` : `已匯出 ${nameOf(out)}`, false, lab.isWeb ? null : { label: '在資料夾中顯示', fn: () => lab.reveal(out) });
   } catch (e) {
     lab.log(`export: ${e.stack || e}`);
     toast(`匯出失敗：${e.message || e}`, true);

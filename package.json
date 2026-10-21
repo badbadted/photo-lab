@@ -8,7 +8,9 @@
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
-    "dist": "electron-builder --win"
+    "dist": "electron-builder --win",
+    "build:web": "node scripts/build-web.mjs",
+    "deploy:web": "node scripts/build-web.mjs && node scripts/deploy-web.mjs"
   },
   "dependencies": {
     "libraw-wasm": "1.6.0"

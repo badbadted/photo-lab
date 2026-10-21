@@ -9,14 +9,17 @@ export const isRaw = (p) => RAW_EXT.includes(extOf(p));
 // 線性 16-bit、相機白平衡、不自動提亮：亮度與白平衡交給使用者在面板調
 const RAW_SETTINGS = { useCameraWb: true, outputBps: 16, outputColor: 1, noAutoBright: true, gamm: [1, 1], userQual: 3, highlight: 0 };
 
+const MIME = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', heic: 'image/heic', heif: 'image/heif' };
+
 /**
- * @returns {{kind:'raw', width, height, data:Uint16Array, info} | {kind:'bitmap', bitmap:ImageBitmap, width, height, info}}
+ * @param opts.maxLong 長邊上限（手機版用，省記憶體）；RAW 在有上限時改用半尺寸解碼
+ * @returns {{kind:'raw', width, height, data:Uint16Array, info} | {kind:'bitmap', bitmap:ImageBitmap|HTMLCanvasElement, width, height, info}}
  */
-export async function decode(path, bytes) {
+export async function decode(path, bytes, opts = {}) {
   if (isRaw(path)) {
     const raw = new LibRaw();
     try {
-      await raw.open(bytes, RAW_SETTINGS);
+      await raw.open(bytes, opts.maxLong ? { ...RAW_SETTINGS, halfSize: true } : RAW_SETTINGS);
       const meta = await raw.metadata(true).catch(() => null);
       const img = await raw.imageData();
       if (!img || img.colors !== 3 || img.bits !== 16) throw new Error('RAW 解碼結果格式不符');
@@ -28,11 +31,41 @@ export async function decode(path, bytes) {
       raw.dispose();
     }
   }
-  const type = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[extOf(path)];
-  const bitmap = await createImageBitmap(new Blob([bytes], { type }), { imageOrientation: 'from-image', colorSpaceConversion: 'none', premultiplyAlpha: 'none' })
-    .catch(() => { throw new Error('這張照片解不開，檔案可能損毀'); });
+  const type = MIME[extOf(path)];
+  let bitmap = await decodeBitmap(new Blob([bytes], { type }), type);
+  if (opts.maxLong && Math.max(bitmap.width, bitmap.height) > opts.maxLong) bitmap = await shrink(bitmap, opts.maxLong);
   const info = type === 'image/jpeg' ? infoFromExif(readJpegExif(bytes)) : null;
   return { kind: 'bitmap', bitmap, width: bitmap.width, height: bitmap.height, info };
+}
+
+/** 優先 createImageBitmap（照 EXIF 轉正）；不支援這些選項的瀏覽器（舊 Safari）改走 <img>，它預設也會照 EXIF 轉正 */
+async function decodeBitmap(blob, type) {
+  try {
+    return await createImageBitmap(blob, { imageOrientation: 'from-image', colorSpaceConversion: 'none', premultiplyAlpha: 'none' });
+  } catch { /* 往下試 */ }
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = new Image();
+    img.src = url;
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = img.naturalWidth; c.height = img.naturalHeight;
+    c.getContext('2d').drawImage(img, 0, 0);
+    return c;
+  } catch {
+    throw new Error(/hei[cf]/.test(type || '') ? '這個瀏覽器打不開 HEIC，請從 iPhone 相簿選（會自動轉成 JPEG）或改用 Safari' : '這張照片解不開，檔案可能損毀');
+  } finally { URL.revokeObjectURL(url); }
+}
+
+async function shrink(src, maxLong) {
+  const k = maxLong / Math.max(src.width, src.height);
+  const c = document.createElement('canvas');
+  c.width = Math.round(src.width * k); c.height = Math.round(src.height * k);
+  const g = c.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(src, 0, 0, c.width, c.height);
+  src.close?.();
+  return c;
 }
 
 /**
@@ -56,10 +89,9 @@ export async function decodeForFocus(path, bytes, maxLong) {
       }
     } finally { raw.dispose(); }
   } else {
-    const type = { jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp' }[extOf(path)];
-    blob = new Blob([bytes], { type });
+    blob = new Blob([bytes], { type: MIME[extOf(path)] });
   }
-  return scaleRGBA(await createImageBitmap(blob, { imageOrientation: 'from-image' }), maxLong);
+  return scaleRGBA(await decodeBitmap(blob, blob.type), maxLong);
 }
 
 async function scaleRGBA(bmp, maxLong) {
@@ -68,6 +100,6 @@ async function scaleRGBA(bmp, maxLong) {
   const oc = new OffscreenCanvas(w, h), g = oc.getContext('2d', { willReadFrequently: true });
   g.imageSmoothingQuality = 'high';
   g.drawImage(bmp, 0, 0, w, h);
-  bmp.close();
+  bmp.close?.();
   return { px: g.getImageData(0, 0, w, h).data, w, h };
 }

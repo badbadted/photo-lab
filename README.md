@@ -7,6 +7,11 @@
 執行 `PhotoLab-安裝版-<版本>.exe`（放在 `C:\Ted\共用\AI產出\工具\`），不需管理員權限，會建立桌面捷徑。
 不想安裝就直接雙擊 `PhotoLab-免安裝-<版本>.exe`。
 
+## 網頁版（手機也能用）
+
+https://badbadted.github.io/photo-lab/ ——手機打開是精簡版（套風格、裁切、存到相簿），電腦打開是完整版。照片只在自己的裝置上處理，不會上傳。
+發佈新版：`npm run deploy:web`。
+
 ## 開發
 
 ```bash

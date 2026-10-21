@@ -143,3 +143,4 @@ dialog h3{margin:0 0 14px;font-size:16px}
 .flist em{font-style:normal;float:right;color:#6f727a;margin-left:6px}
 .flist .man{color:#ffd166}
 #focusHint{margin-top:6px}
+html.web .desktop-only{display:none}

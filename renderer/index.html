@@ -2,6 +2,9 @@
 <html lang="zh-Hant">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1e1f22">
+<link rel="icon" href="icon.png">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; connect-src 'self'">
 <title>Photo Lab</title>
 <link rel="stylesheet" href="style.css">
@@ -96,7 +99,7 @@
       <select id="exSize"><option value="0">原尺寸</option><option value="4096">長邊 4096</option><option value="2048">長邊 2048</option><option value="1080">長邊 1080</option><option value="custom">自訂長邊…</option></select>
       <input type="number" id="exCustom" min="100" max="20000" value="3000" hidden></label>
     <label class="f"><span>檔名後綴</span><input type="text" id="exSuffix" value="_edit" maxlength="40"></label>
-    <div class="f"><span>存到</span>
+    <div class="f desktop-only"><span>存到</span>
       <div class="dest"><label><input type="radio" name="exDest" value="same" checked> 跟原檔同一個資料夾</label>
         <label><input type="radio" name="exDest" value="custom"> <button type="button" class="btn sm" id="exPick">選擇資料夾…</button></label>
         <div class="path" id="exDir"></div></div></div>
@@ -134,6 +137,6 @@
   <div data-act="delete" class="danger">刪除</div>
 </div>
 <div class="toast" id="toast" hidden></div>
-<script type="module" src="app.js"></script>
+<script type="module" src="entry.js"></script>
 </body>
 </html>
