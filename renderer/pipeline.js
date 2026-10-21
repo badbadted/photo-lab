@@ -1,5 +1,8 @@
 // WebGL2 修圖管線：原圖放 GPU 貼圖（線性光），所有調整在 shader 裡一次算完。
 // 螢幕預覽、直方圖、全尺寸匯出共用同一支 shader，保證「看到的＝匯出的」。
+import { resolveStyle } from './styles.js';
+
+const ADJ_KEYS = ['temp', 'tint', 'exp', 'con', 'hl', 'sh', 'wh', 'bl', 'vib', 'sat'];
 
 const VS = `#version 300 es
 in vec2 aPos;
@@ -19,6 +22,9 @@ uniform bool uOrig;
 uniform bool uRaw;
 uniform float uTemp, uTint, uExp, uCon, uHl, uSh, uWh, uBl, uVib, uSat;
 uniform float uVig, uMid, uRound, uFeat, uVhl;
+uniform float uFade, uGC, uGrain;   // 風格：褪色、綠轉青、顆粒
+uniform bool uMono;
+uniform vec3 uSplitS, uSplitH;      // 風格：陰影／亮部染色（已乘強度）
 out vec4 outColor;
 
 float luma(vec3 c){ return dot(c, vec3(0.2126, 0.7152, 0.0722)); }
@@ -61,10 +67,29 @@ void main(){
     e = (e - bp) / (wp - bp);
     float k = clamp(uCon * 0.9 + baseCon, -1.0, 1.0);
     e = vec3(scurve(e.r, k), scurve(e.g, k), scurve(e.b, k));
+    if (uGC > 0.0) { // 綠色往青色靠、略降飽和（日系）
+      float mx = max(e.r, max(e.g, e.b)), mn = min(e.r, min(e.g, e.b));
+      if (e.g >= mx && mx - mn > 0.04) {
+        float w = uGC * min(1.0, (e.g - max(e.r, e.b)) * 4.0);
+        e.b += (e.g - e.b) * 0.55 * w; e.r -= (e.r - mn) * 0.3 * w;
+        float Lg = luma(e); e = Lg + (e - Lg) * (1.0 - 0.25 * w);
+      }
+    }
     float L2 = luma(e);
-    float sat0 = max(e.r, max(e.g, e.b)) - min(e.r, min(e.g, e.b));
-    float f = (1.0 + uSat) * (1.0 + uVib * (1.0 - clamp(sat0 * 1.8, 0.0, 1.0)));
-    e = L2 + (e - L2) * max(f, 0.0);
+    if (uMono) {
+      e = vec3(dot(e, vec3(0.3, 0.59, 0.11)));
+    } else {
+      float sat0 = max(e.r, max(e.g, e.b)) - min(e.r, min(e.g, e.b));
+      float f = (1.0 + uSat) * (1.0 + uVib * (1.0 - clamp(sat0 * 1.8, 0.0, 1.0)));
+      e = L2 + (e - L2) * max(f, 0.0);
+    }
+    float L3 = min(luma(e), 1.0);
+    e += uSplitS * (1.0 - L3) * (1.0 - L3) + uSplitH * L3 * L3;
+    e = uFade + e * (1.0 - uFade);
+    if (uGrain > 0.0) { // 顆粒大小跟原圖長邊連動（約 2000 顆寬），換解析度看起來一樣
+      vec2 gcell = floor(s / max(1.0, max(uSrc.x, uSrc.y) / 2000.0));
+      e += (fract(sin(dot(gcell, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 2.0 * uGrain;
+    }
     if (uVig != 0.0) {
       vec2 q = d - uCrop.xy;
       vec2 hw = uCrop.zw * 0.5;
@@ -198,10 +223,13 @@ export class Pipeline {
     gl.uniform3f(u.uBg, bg[0], bg[1], bg[2]);
     gl.uniform1i(u.uOrig, opts.orig ? 1 : 0);
     gl.uniform1i(u.uRaw, this.raw ? 1 : 0);
-    const n = (v) => v / 100;
-    gl.uniform1f(u.uTemp, n(s.temp)); gl.uniform1f(u.uTint, n(s.tint)); gl.uniform1f(u.uExp, s.exp);
-    gl.uniform1f(u.uCon, n(s.con)); gl.uniform1f(u.uHl, n(s.hl)); gl.uniform1f(u.uSh, n(s.sh));
-    gl.uniform1f(u.uWh, n(s.wh)); gl.uniform1f(u.uBl, n(s.bl)); gl.uniform1f(u.uVib, n(s.vib)); gl.uniform1f(u.uSat, n(s.sat));
+    const n = (v) => v / 100, st = resolveStyle(s, ADJ_KEYS), j = st.adj;
+    gl.uniform1f(u.uTemp, n(j.temp)); gl.uniform1f(u.uTint, n(j.tint)); gl.uniform1f(u.uExp, j.exp);
+    gl.uniform1f(u.uCon, n(j.con)); gl.uniform1f(u.uHl, n(j.hl)); gl.uniform1f(u.uSh, n(j.sh));
+    gl.uniform1f(u.uWh, n(j.wh)); gl.uniform1f(u.uBl, n(j.bl)); gl.uniform1f(u.uVib, n(j.vib)); gl.uniform1f(u.uSat, n(j.sat));
+    gl.uniform1f(u.uFade, st.fade); gl.uniform1f(u.uGC, st.gc); gl.uniform1f(u.uGrain, st.grain);
+    gl.uniform1i(u.uMono, st.mono ? 1 : 0);
+    gl.uniform3f(u.uSplitS, ...st.splitS); gl.uniform3f(u.uSplitH, ...st.splitH);
     gl.uniform1f(u.uVig, n(s.vig)); gl.uniform1f(u.uMid, n(s.mid)); gl.uniform1f(u.uRound, n(s.round));
     gl.uniform1f(u.uFeat, n(s.feat)); gl.uniform1f(u.uVhl, n(s.vhl));
   }

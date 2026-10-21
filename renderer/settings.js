@@ -1,5 +1,6 @@
 // 調整項目定義、預設值、歷史紀錄（純邏輯，可在 node 測）
 import { defaultCrop, RATIOS } from './crop.js';
+import { STYLES } from './styles.js';
 
 // key: [最小, 最大, 預設, 名稱, 步進]
 export const ADJ = {
@@ -22,7 +23,7 @@ export const GROUPS = [
 export const SCHEMA_VERSION = 1;
 
 export function defaults(W, H) {
-  const s = { crop: defaultCrop(W, H) };
+  const s = { crop: defaultCrop(W, H), style: 'none', amt: 100 };
   for (const k in ADJ) s[k] = ADJ[k][2];
   return s;
 }
@@ -33,6 +34,7 @@ const near = (a, b) => Math.abs(a - b) < 1e-6;
 export function isDefault(s, W, H) {
   const d = defaults(W, H);
   for (const k in ADJ) if (!near(s[k], d[k])) return false;
+  if (s.style !== 'none' || !near(s.amt, 100)) return false;
   const c = s.crop;
   return c.ratio === 'orig' && !c.flip && near(c.angle, 0) && near(c.cx, 0) && near(c.cy, 0) && near(c.w, W) && near(c.h, H);
 }
@@ -45,6 +47,8 @@ export function sanitize(raw, W, H) {
     const v = Number(raw[k]);
     if (Number.isFinite(v)) s[k] = Math.min(ADJ[k][1], Math.max(ADJ[k][0], v));
   }
+  if (STYLES.some((x) => x.id === raw.style)) s.style = raw.style;
+  if (Number.isFinite(Number(raw.amt))) s.amt = Math.min(100, Math.max(0, Number(raw.amt)));
   const c = raw.crop;
   if (c && typeof c === 'object') {
     if (RATIOS.some((r) => r.v === c.ratio)) s.crop.ratio = c.ratio;

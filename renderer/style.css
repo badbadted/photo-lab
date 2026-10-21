@@ -82,3 +82,17 @@ dialog h3{margin:0 0 14px;font-size:16px}
 .toast{position:fixed;left:50%;bottom:64px;transform:translateX(-50%);background:#111214;border:1px solid var(--line);border-radius:8px;padding:10px 16px;display:flex;gap:12px;align-items:center;box-shadow:0 6px 24px #000a;z-index:10;max-width:80vw}
 .toast.err{border-color:#e5484d}
 .toast a{color:var(--ac);cursor:pointer}
+
+.box{padding:12px;border-bottom:1px solid var(--line)}
+.autorow{display:flex;gap:8px}
+.autorow .btn{flex:1}
+.autonote{color:var(--t2);font-size:11px;margin-top:6px;min-height:16px}
+.sgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:2px}
+.st{background:var(--p2);border:2px solid transparent;border-radius:8px;padding:4px;cursor:pointer;text-align:center}
+.st canvas{width:100%;aspect-ratio:3/2;object-fit:contain;display:block;border-radius:4px;background:#18191b}
+.st span{display:block;margin-top:3px;font-size:12px}
+.st.on{border-color:var(--ac)}
+.st:hover:not(.on){border-color:#5a5d66}
+#row_amt{margin-top:10px}
+#row_amt.off{opacity:.4;pointer-events:none}
+.desc{color:var(--t2);font-size:12px;min-height:36px}

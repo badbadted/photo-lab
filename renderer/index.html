@@ -58,6 +58,13 @@
   <aside class="right" id="right">
     <div class="histo"><h4>直方圖</h4><canvas id="hg" width="552" height="180"></canvas>
       <div class="hinfo"><span id="shot"></span><span id="clip"></span></div></div>
+    <div class="box"><h4>自動</h4>
+      <div class="autorow"><button class="btn" id="autoAll" disabled>✦ 自動調整</button><button class="btn" id="autoWb" disabled>自動白平衡</button></div>
+      <div class="autonote" id="autoNote">分析照片亮度分布與色偏，自動設定曝光、亮部、陰影、白色、黑色、白平衡</div></div>
+    <details open><summary>風格</summary><div class="sec">
+      <div class="sgrid" id="styles"></div>
+      <div class="row" id="row_amt"><span class="name" id="amtName">強度</span><input type="range" id="amt" min="0" max="100" value="100"><output id="o_amt">100</output></div>
+      <div class="desc" id="styleDesc"></div></div></details>
     <details open><summary>基本</summary><div class="sec" id="basic"></div></details>
     <details open><summary>效果</summary><div class="sec" id="fx"></div></details>
     <div class="tip">雙擊拉桿或名稱可歸零</div>

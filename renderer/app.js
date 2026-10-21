@@ -4,6 +4,8 @@ import { decode } from './decode.js';
 import { fmtShutter } from './exif.js';
 import { ADJ, GROUPS, SCHEMA_VERSION, defaults, clone, isDefault, sanitize, fmtValue, History } from './settings.js';
 import { RATIOS, ratioOf, fits, fitCrop, tryRect, rotatedBounds, resizeFromCorner, scaleCrop, defaultCrop } from './crop.js';
+import { STYLES, styleById } from './styles.js';
+import { autoTone, autoWhiteBalance, pixelStats } from './auto.js';
 
 const $ = (id) => document.getElementById(id);
 const lab = window.lab;
@@ -51,6 +53,11 @@ function syncUI() {
   $('angle').value = S.crop.angle;
   $('o_angle').textContent = `${S.crop.angle.toFixed(1)}°`;
   $('flip').disabled = S.crop.ratio === 'free';
+  $('amt').value = S.amt;
+  $('o_amt').textContent = Math.round(S.amt);
+  $('row_amt').classList.toggle('off', S.style === 'none');
+  $('styleDesc').textContent = styleById(S.style).desc;
+  for (const el of document.querySelectorAll('.st')) el.classList.toggle('on', el.dataset.id === S.style);
 }
 
 function drawHistory() {
@@ -118,7 +125,69 @@ function redrawNow() {
   pipe.draw(st.S, f, { orig: st.orig });
   drawOverlay(f);
   if (!histRaf) histRaf = requestAnimationFrame(() => { histRaf = 0; drawHistogram(); });
+  scheduleThumbs();
 }
+
+// ---------- 風格 ----------
+for (const s of STYLES) {
+  $('styles').insertAdjacentHTML('beforeend', `<div class="st" data-id="${s.id}" title="${s.desc}"><canvas width="150" height="100"></canvas><span>${s.name}</span></div>`);
+}
+$('styles').addEventListener('click', (e) => {
+  const el = e.target.closest('.st');
+  if (!el || !st.S || st.S.style === el.dataset.id) return;
+  st.S.style = el.dataset.id;
+  syncUI(); redraw(); commit(`風格 ${styleById(st.S.style).name}`);
+});
+{
+  const amt = $('amt');
+  let before = 100;
+  amt.addEventListener('pointerdown', () => { before = st.S?.amt; });
+  amt.addEventListener('input', () => { if (!st.S) return; st.S.amt = +amt.value; $('o_amt').textContent = st.S.amt; redraw(); });
+  amt.addEventListener('change', () => { if (st.S && st.S.amt !== before) { commit(`風格強度 ${st.S.amt}`); before = st.S.amt; } });
+  const reset = () => { if (!st.S || st.S.amt === 100) return; st.S.amt = 100; syncUI(); redraw(); commit('風格強度 100'); };
+  amt.addEventListener('dblclick', reset);
+  $('amtName').addEventListener('dblclick', reset);
+}
+
+// 縮圖用目前這張照片＋目前的拉桿＋裁切，套各風格 100% 強度
+let thumbTimer = 0;
+function scheduleThumbs() { clearTimeout(thumbTimer); thumbTimer = setTimeout(drawThumbs, 180); }
+function drawThumbs() {
+  if (!st.S) return;
+  const c = st.S.crop, frame = { cx: c.cx, cy: c.cy, w: c.w, h: c.h };
+  const k = Math.min(150 / c.w, 100 / c.h), w = Math.max(1, Math.round(c.w * k)), h = Math.max(1, Math.round(c.h * k));
+  for (const el of document.querySelectorAll('.st')) {
+    const cv2 = el.querySelector('canvas');
+    if (cv2.width !== w || cv2.height !== h) { cv2.width = w; cv2.height = h; }
+    const px = pipe.readPixels({ ...st.S, style: el.dataset.id, amt: 100 }, frame, w, h);
+    cv2.getContext('2d').putImageData(new ImageData(px, w, h), 0, 0);
+  }
+}
+
+// ---------- 自動 ----------
+function statsFor(P) {
+  const c = st.S.crop, k = Math.min(1, 320 / Math.max(c.w, c.h));
+  const w = Math.max(1, Math.round(c.w * k)), h = Math.max(1, Math.round(c.h * k));
+  // 不含風格與暈映：自動調的是底下的拉桿
+  return pixelStats(pipe.readPixels({ ...st.S, ...P, style: 'none', vig: 0 }, { cx: c.cx, cy: c.cy, w: c.w, h: c.h }, w, h));
+}
+function runAuto(which) {
+  if (!st.S) return;
+  const P = {};
+  for (const k in ADJ) P[k] = st.S[k];
+  if (which !== 'tone') autoWhiteBalance(P, statsFor);
+  if (which !== 'wb') autoTone(P, statsFor);
+  const changed = Object.keys(ADJ).filter((k) => P[k] !== st.S[k]);
+  Object.assign(st.S, P);
+  syncUI(); redraw();
+  const keys = which === 'wb' ? ['temp', 'tint'] : ['exp', 'hl', 'sh', 'wh', 'bl', 'temp', 'tint'];
+  $('autoNote').textContent = changed.length
+    ? `已設定：${keys.map((k) => `${ADJ[k][3]} ${fmtValue(k, st.S[k])}`).join('、')}（可再微調，Ctrl+Z 可復原）`
+    : '這張照片不需要調整';
+  if (changed.length) commit(which === 'wb' ? '自動白平衡' : '自動調整');
+}
+$('autoAll').onclick = () => runAuto('all');
+$('autoWb').onclick = () => runAuto('wb');
 
 function drawHistogram() {
   if (!st.S) return;
@@ -330,7 +399,8 @@ async function loadIndex(idx) {
     st.histories.set(path, st.hist);
     if (st.histories.size > 30) st.histories.delete(st.histories.keys().next().value);
     $('empty').hidden = true; $('cw').hidden = false;
-    for (const id of ['cropBtn', 'baBtn', 'resetAll', 'exportBtn']) $(id).disabled = false;
+    for (const id of ['cropBtn', 'baBtn', 'resetAll', 'exportBtn', 'autoAll', 'autoWb']) $(id).disabled = false;
+    $('autoNote').textContent = '分析照片亮度分布與色偏，自動設定曝光、亮部、陰影、白色、黑色、白平衡';
     setCropMode(false);
     syncUI(); drawHistory(); updateHeader(path); renderInfo(); layout();
   } catch (e) {
