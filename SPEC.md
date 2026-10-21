@@ -118,6 +118,8 @@ test/          node --test 單元測試
 
 ## 已知限制
 
+- **手機版以 JPEG 為主（2026-10-21 使用者決定）**：iPhone 從「照片圖庫」選照片時，iOS 會自動把 RAW 轉成 JPEG 才交給網頁；「選 RAW 原始檔」（只列 RAW 類型、DNG 排第一）真機實測無效。要用 RAW 只能先在「照片」分享→選項開「所有照片資料」→儲存到檔案，再從「選擇檔案」挑；RAW 細修建議用桌面版
+
 - RAW 只用 iPhone DNG 實測過；Canon／Nikon／Sony 原廠 RAW 手邊沒有檔案，未實測
 - iPhone DNG 開起來比 iPhone 自己的成像暗、平：DNG 的 BaselineExposure（+3.3 EV）套上去會過曝 70%，所以不套，交給曝光拉桿
 - 匯出不寫入 EXIF
