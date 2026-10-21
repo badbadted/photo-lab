@@ -117,3 +117,6 @@ dialog h3{margin:0 0 14px;font-size:16px}
 .ctxmenu div:hover{background:var(--p2)}
 .ctxmenu .danger{color:#ff6b6b}
 .ctxmenu hr{border:0;border-top:1px solid var(--line);margin:4px 0}
+.autochk{display:flex;gap:6px;align-items:flex-start;margin:0 0 12px;cursor:pointer;background:var(--p2);border-radius:6px;padding:7px 9px}
+.autochk input{margin-top:3px}
+.autochk small{display:block;color:var(--t2);font-size:11px}

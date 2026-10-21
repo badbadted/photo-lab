@@ -5,7 +5,7 @@ import { fmtShutter } from './exif.js';
 import { ADJ, GROUPS, SCHEMA_VERSION, defaults, clone, isDefault, sanitize, fmtValue, History } from './settings.js';
 import { RATIOS, ratioOf, fits, fitCrop, tryRect, rotatedBounds, resizeFromCorner, scaleCrop, defaultCrop } from './crop.js';
 import { STYLES, styleById, customStyles, getCustomStyles, setCustomStyles, captureStyle, adoptOrphan, describeStyle, isCustomId, sanitizeCustomStyle } from './styles.js';
-import { autoTone, autoWhiteBalance, pixelStats } from './auto.js';
+import { autoTone, autoWhiteBalance, pixelStats, untouchedForAuto } from './auto.js';
 
 const $ = (id) => document.getElementById(id);
 const lab = window.lab;
@@ -160,8 +160,16 @@ function pickStyle(e) {
   if (e.target.classList.contains('more')) { openStyleMenu(e.target.closest('.st').dataset.id, e.clientX, e.clientY); return; }
   const el = e.target.closest('.st');
   if (!el || !st.S || st.S.style === el.dataset.id) return;
+  const name = styleById(el.dataset.id).name;
+  // 先自動校正：只在光線、白平衡都還沒調過時做，校正和風格合成一筆歷史
+  const corrected = $('autoBeforeStyle').checked && el.dataset.id !== 'none' && untouchedForAuto(st.S) && applyAuto('all');
   st.S.style = el.dataset.id;
-  syncUI(); redraw(); commit(`風格 ${styleById(st.S.style).name}`);
+  syncUI(); redraw(); commit(corrected ? `自動校正＋風格 ${name}` : `風格 ${name}`);
+}
+{
+  const cb = $('autoBeforeStyle');
+  cb.checked = store.get('autoBeforeStyle', false);
+  cb.addEventListener('change', () => store.set('autoBeforeStyle', cb.checked));
 }
 $('styles').addEventListener('click', pickStyle);
 $('mine').addEventListener('click', pickStyle);
@@ -307,20 +315,25 @@ function statsFor(P) {
   // 不含風格與暈映：自動調的是底下的拉桿
   return pixelStats(pipe.readPixels({ ...st.S, ...P, style: 'none', vig: 0 }, { cx: c.cx, cy: c.cy, w: c.w, h: c.h }, w, h));
 }
-function runAuto(which) {
-  if (!st.S) return;
+/** 算出自動調整並寫進拉桿（不進歷史）；回傳有沒有改到東西 */
+function applyAuto(which) {
   const P = {};
   for (const k in ADJ) P[k] = st.S[k];
   if (which !== 'tone') autoWhiteBalance(P, statsFor);
   if (which !== 'wb') autoTone(P, statsFor);
   const changed = Object.keys(ADJ).filter((k) => P[k] !== st.S[k]);
   Object.assign(st.S, P);
-  syncUI(); redraw();
   const keys = which === 'wb' ? ['temp', 'tint'] : ['exp', 'hl', 'sh', 'wh', 'bl', 'temp', 'tint'];
   $('autoNote').textContent = changed.length
     ? `已設定：${keys.map((k) => `${ADJ[k][3]} ${fmtValue(k, st.S[k])}`).join('、')}（可再微調，Ctrl+Z 可復原）`
     : '這張照片不需要調整';
-  if (changed.length) commit(which === 'wb' ? '自動白平衡' : '自動調整');
+  return changed.length > 0;
+}
+function runAuto(which) {
+  if (!st.S) return;
+  const changed = applyAuto(which);
+  syncUI(); redraw();
+  if (changed) commit(which === 'wb' ? '自動白平衡' : '自動調整');
 }
 $('autoAll').onclick = () => runAuto('all');
 $('autoWb').onclick = () => runAuto('wb');

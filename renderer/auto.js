@@ -50,3 +50,9 @@ export function pixelStats(px) {
   const q = (p) => { const t = p * n; let acc = 0; for (let i = 0; i < 1024; i++) { acc += hist[i]; if (acc > t) return (i + 0.5) / 1024; } return 1; };
   return { p005: q(0.005), p05: q(0.05), p50: q(0.5), p995: q(0.995), clip: clip / n, neutral: cnt / n, r: cnt ? sr / cnt : 0, g: cnt ? sg / cnt : 0, b: cnt ? sb / cnt : 0 };
 }
+
+/** 光線與白平衡都還是預設值＝這張照片還沒被手動或自動調過，套風格前可以放心自動校正 */
+export const NEEDS_AUTO_KEYS = ['exp', 'hl', 'sh', 'wh', 'bl', 'temp', 'tint'];
+export function untouchedForAuto(S) {
+  return NEEDS_AUTO_KEYS.every((k) => Math.abs(S[k] || 0) < 1e-6);
+}

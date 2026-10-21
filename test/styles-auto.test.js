@@ -86,3 +86,11 @@ test('像素統計', () => {
   const red = new Uint8ClampedArray([230, 60, 80, 255, 200, 40, 60, 255]);
   assert.equal(pixelStats(red).neutral, 0); // 鮮紅色不算灰白
 });
+
+test('套風格前自動校正：只在光線、白平衡都沒動過時才做', async () => {
+  const { untouchedForAuto } = await import('../renderer/auto.js');
+  const d = defaults(10, 10);
+  assert.ok(untouchedForAuto(d));
+  assert.ok(untouchedForAuto({ ...d, con: 30, vib: 20, vig: -40, style: 'jp' }), '色彩、暈映、風格不影響判斷');
+  for (const k of ['exp', 'hl', 'sh', 'wh', 'bl', 'temp', 'tint']) assert.ok(!untouchedForAuto({ ...d, [k]: k === 'exp' ? 0.05 : 1 }), `${k} 動過就不校正`);
+});
