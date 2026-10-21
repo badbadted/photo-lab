@@ -31,11 +31,14 @@ function createWebLab() {
     return ids;
   }
 
-  function pick({ dir = false } = {}) {
+  function pick({ dir = false, raw = false } = {}) {
     return new Promise((resolve) => {
       const input = document.createElement('input');
       input.type = 'file';
-      input.accept = 'image/*,.dng,.cr3,.cr2,.nef,.arw,.raf,.orf,.rw2,.pef,.srw,.heic';
+      // iPhone Safari 會把照片轉成 accept 清單裡的第一種格式；寫 image/* 開頭，RAW 就被轉成 JPEG。
+      // 「選 RAW 原始檔」只列 RAW 類型、DNG 排第一，不放 image/*，讓它交出原檔（需真機驗證）
+      input.accept = raw ? '.dng,image/x-adobe-dng,image/dng,.cr3,.cr2,.nef,.arw,.raf,.orf,.rw2,.pef,.srw'
+        : 'image/*,.dng,.cr3,.cr2,.nef,.arw,.raf,.orf,.rw2,.pef,.srw,.heic';
       input.multiple = true;
       if (dir) input.webkitdirectory = true;
       input.style.display = 'none';
@@ -52,7 +55,7 @@ function createWebLab() {
   return {
     isWeb: true,
     canShareFiles: () => !!(navigator.canShare && navigator.canShare({ files: [new File([new Uint8Array(1)], 'x.jpg', { type: 'image/jpeg' })] })),
-    openFiles: () => pick(),
+    openFiles: (opts) => pick(opts),
     async openFolder() {
       const ids = await pick({ dir: true });
       return ids.length ? { dir: ids[0].slice(0, ids[0].indexOf('/')), files: ids } : null;

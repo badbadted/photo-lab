@@ -65,14 +65,25 @@ const frameOf = () => {
 const nameOf = (id) => id.slice(id.lastIndexOf('/') + 1);
 
 // ---------- 開檔與換張 ----------
-$('mOpen').onclick = async () => {
+$('mOpen').onclick = () => {
   if (st.crop) return cancelCrop();
-  const ids = await lab.openFiles();
+  sheet('<b>開啟照片</b>', [
+    ['從相簿選', () => openPicked(false), 'pri'],
+    ['選 RAW 原始檔', () => openPicked(true)],
+  ], 'iPhone 從相簿選時，可能會把 RAW 自動轉成 JPEG。「選 RAW 原始檔」會優先拿 DNG 原檔；要是還是 JPEG，先在「照片」把它分享→儲存到檔案，再從這裡的「選擇檔案」挑。');
+};
+// 注意：叫出選檔畫面前不能先 await，否則 iPhone 會擋掉（必須是使用者剛點的那一下）
+async function openPicked(raw) {
+  const ids = await lab.openFiles({ raw });
   if (!ids.length) return;
   await persist();
   st.files = ids; st.states.clear(); st.idx = -1;
   await show(0);
-};
+  if (raw) {
+    const notRaw = ids.filter((id) => !/\.(dng|cr3|cr2|nef|arw|raf|orf|rw2|pef|srw)$/i.test(id)).length;
+    if (notRaw) toast(`有 ${notRaw} 張拿到的不是 RAW（iPhone 已轉成 JPEG）。請先在「照片」分享→儲存到檔案，再從「選擇檔案」挑 DNG`);
+  }
+}
 
 async function show(i) {
   if (i < 0 || i >= st.files.length || i === st.idx) return;
