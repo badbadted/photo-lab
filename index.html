@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1e1f22">
+<link rel="icon" href="icon.png">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; img-src 'self' blob: data:; style-src 'self' 'unsafe-inline'; connect-src 'self'">
+<title>Photo Lab</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <button class="btn icon" id="toggleLeft" title="顯示／隱藏左側欄">☰</button>
+  <span class="logo">◐ Photo Lab</span>
+  <button class="btn icon" id="prev" title="上一張（←）" disabled>‹</button>
+  <span class="file" id="fileLabel">尚未開啟照片</span>
+  <button class="btn icon" id="next" title="下一張（→）" disabled>›</button>
+  <span class="fbadge" id="focusBadge" hidden title="點一下切換：準焦 → 待確認 → 失焦（鍵盤 1／2／3）"></span>
+  <span class="spacer"></span>
+  <button class="btn" id="focusBtn" title="分析整個資料夾的對焦，分成準焦／待確認／失焦" disabled>◎ 檢查對焦</button>
+  <button class="btn" id="openFiles" title="Ctrl+O">開啟照片</button>
+  <button class="btn" id="openFolder" title="Ctrl+Shift+O">開啟資料夾</button>
+  <button class="btn pri" id="exportBtn" title="Ctrl+Shift+E" disabled>匯出…</button>
+</header>
+<main>
+  <aside class="left" id="left">
+    <div id="focusPanel" hidden>
+      <h4>對焦</h4>
+      <div class="fprog" id="focusProg" hidden><span id="focusProgText">分析中…</span><div class="fbar"><i id="focusBar"></i></div>
+        <span class="small">可以先修圖，分析在背景跑　</span><button class="btn sm" id="focusStop">停止</button></div>
+      <div id="focusGroups"></div>
+      <div class="small" id="focusHint">點類別展開清單，點檔名跳到那張。數字是清晰度（跟同資料夾最清楚的那群比）。</div>
+    </div>
+    <h4>歷史紀錄</h4>
+    <div id="hist"></div>
+    <div class="exif" id="exif"></div>
+  </aside>
+  <section class="stage">
+    <div class="view" id="view">
+      <div class="empty" id="empty">
+        <div class="empty-icon">◐</div>
+        <div>把照片拖進來，或按「開啟照片」</div>
+        <div class="hint">支援 JPEG、PNG、WebP 與相機 RAW（CR3、CR2、NEF、ARW、DNG、RAF…）</div>
+      </div>
+      <div class="cw" id="cw" hidden>
+        <canvas id="img"></canvas>
+        <canvas id="overlay"></canvas>
+        <div class="badge" id="badge">原圖</div>
+      </div>
+      <div class="loading" id="loading" hidden><div class="spin"></div><span id="loadingText">載入中…</span></div>
+    </div>
+    <div class="tools" id="tools">
+      <button class="btn" id="cropBtn" title="R" disabled>⛶ 裁切</button>
+      <span class="croprow" id="cropRow">
+        <select class="btn" id="ratio"></select>
+        <button class="btn" id="flip" title="直式／橫式互換（X）">⇄ 直橫</button>
+        <span class="lbl">拉直</span><input type="range" id="angle" min="-45" max="45" step="0.1" value="0"><output id="o_angle">0°</output>
+        <button class="btn" id="cropReset" title="重設裁切">重設</button>
+      </span>
+      <span class="sep"></span>
+      <button class="btn" id="baBtn" title="按住看原圖（\）" disabled>◧ 原圖</button>
+      <span class="sep"></span>
+      <button class="btn" id="undo" title="Ctrl+Z" disabled>↶ 復原</button>
+      <button class="btn" id="redo" title="Ctrl+Y" disabled>↷ 重做</button>
+      <span class="sep"></span>
+      <button class="btn" id="resetAll" disabled>全部重設</button>
+    </div>
+  </section>
+  <aside class="right" id="right">
+    <div class="histo"><h4>直方圖</h4><canvas id="hg" width="552" height="180"></canvas>
+      <div class="hinfo"><span id="shot"></span><span id="clip"></span></div></div>
+    <div class="box"><h4>自動</h4>
+      <div class="autorow"><button class="btn" id="autoAll" disabled>✦ 自動調整</button><button class="btn" id="autoWb" disabled>自動白平衡</button></div>
+      <div class="autonote" id="autoNote">分析照片亮度分布與色偏，自動設定曝光、亮部、陰影、白色、黑色、白平衡</div></div>
+    <details open><summary>風格</summary><div class="sec">
+      <label class="autochk"><input type="checkbox" id="autoBeforeStyle"><div>套風格時先自動校正<small>只在這張照片的光線、白平衡還沒調過時才做，不會蓋掉你拉好的數值</small></div></label>
+      <h4 class="subh">我的風格</h4>
+      <div class="sgrid" id="mine"></div>
+      <div class="mine-empty" id="mineEmpty">還沒有自己的風格。調好喜歡的色調後按下面的按鈕存起來。</div>
+      <button class="btn savestyle" id="saveStyleBtn" disabled>＋ 存成我的風格</button>
+      <h4 class="subh">內建</h4>
+      <div class="sgrid" id="styles"></div>
+      <div class="row" id="row_amt"><span class="name" id="amtName">強度</span><input type="range" id="amt" min="0" max="100" value="100"><output id="o_amt">100</output></div>
+      <div class="desc" id="styleDesc"></div></div></details>
+    <details open><summary>基本</summary><div class="sec" id="basic"></div></details>
+    <details open><summary>效果</summary><div class="sec" id="fx"></div></details>
+    <div class="tip">雙擊拉桿或名稱可歸零</div>
+  </aside>
+</main>
+
+<dialog id="exportDlg">
+  <form method="dialog" id="exportForm">
+    <h3>匯出</h3>
+    <label class="f"><span>格式</span>
+      <select id="exFmt"><option value="jpg">JPEG</option><option value="png">PNG</option></select></label>
+    <label class="f" id="exQRow"><span>品質</span><input type="range" id="exQ" min="50" max="100" value="90"><output id="exQo">90</output></label>
+    <label class="f"><span>尺寸</span>
+      <select id="exSize"><option value="0">原尺寸</option><option value="4096">長邊 4096</option><option value="2048">長邊 2048</option><option value="1080">長邊 1080</option><option value="custom">自訂長邊…</option></select>
+      <input type="number" id="exCustom" min="100" max="20000" value="3000" hidden></label>
+    <label class="f"><span>檔名後綴</span><input type="text" id="exSuffix" value="_edit" maxlength="40"></label>
+    <div class="f desktop-only"><span>存到</span>
+      <div class="dest"><label><input type="radio" name="exDest" value="same" checked> 跟原檔同一個資料夾</label>
+        <label><input type="radio" name="exDest" value="custom"> <button type="button" class="btn sm" id="exPick">選擇資料夾…</button></label>
+        <div class="path" id="exDir"></div></div></div>
+    <div class="exinfo" id="exInfo"></div>
+    <div class="actions"><button type="button" class="btn" id="exCancel">取消</button><button type="submit" class="btn pri" id="exGo">匯出</button></div>
+  </form>
+</dialog>
+<dialog id="saveStyleDlg">
+  <form method="dialog" id="saveStyleForm">
+    <h3 id="ssTitle">存成我的風格</h3>
+    <label class="f"><span>名稱</span><input type="text" id="ssName" maxlength="20" required></label>
+    <div class="f" id="ssGroupsRow"><span>包含</span>
+      <div class="chk">
+        <label><input type="checkbox" checked disabled><div>色彩與對比<small>鮮豔度、飽和度、對比，以及內建風格的染色、褪色、顆粒（一定會存）</small></div></label>
+        <label><input type="checkbox" id="ssWb" checked><div>白平衡<small>色溫、色調</small></div></label>
+        <label><input type="checkbox" id="ssLight"><div>光線<small>曝光、亮部、陰影、白色、黑色——每張照片亮度不同，預設不存</small></div></label>
+        <label><input type="checkbox" id="ssVig" checked><div>暈映<small>暈映量、中點、圓度、羽化、亮部保護</small></div></label>
+      </div></div>
+    <div class="exinfo" id="ssInfo">存好後會出現在「我的風格」。目前這張照片的拉桿不會被改動。</div>
+    <div class="err" id="ssErr"></div>
+    <div class="actions"><button type="button" class="btn" id="ssCancel">取消</button><button type="submit" class="btn pri" id="ssGo">儲存</button></div>
+  </form>
+</dialog>
+<dialog id="confirmDlg">
+  <form method="dialog" id="confirmForm">
+    <h3 id="cfTitle"></h3>
+    <div class="exinfo" id="cfText"></div>
+    <div class="actions"><button type="button" class="btn" id="cfCancel">取消</button><button type="submit" class="btn" id="cfGo"></button></div>
+  </form>
+</dialog>
+<div class="ctxmenu" id="ctxMenu" hidden>
+  <div data-act="rename">重新命名</div>
+  <div data-act="update">用目前的調整更新</div>
+  <hr>
+  <div data-act="delete" class="danger">刪除</div>
+</div>
+<div class="toast" id="toast" hidden></div>
+<script type="module" src="entry.js"></script>
+</body>
+</html>
