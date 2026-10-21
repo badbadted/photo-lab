@@ -139,3 +139,13 @@ test('16-bit → 半精度轉換', () => {
   }
   for (let i = 1; i < 65536; i++) assert.ok(toF(lut[i]) >= toF(lut[i - 1]), `單調遞增 @${i}`);
 });
+
+test('裁切固定尺寸與自訂比例：清洗與判斷', async () => {
+  const { validRatio } = await import('../renderer/crop.js');
+  assert.ok(validRatio('0.5625') && validRatio('0.8') && validRatio('free') && validRatio('1.2345'));
+  assert.ok(!validRatio('abc') && !validRatio('50') && !validRatio(0.8));
+  const s = sanitize({ crop: { ratio: '0.8', size: { w: 1080.4, h: 1350 } } }, W, H);
+  assert.deepEqual(s.crop.size, { w: 1080, h: 1350 });
+  assert.equal(sanitize({ crop: { size: { w: 5, h: 99999 } } }, W, H).crop.size, undefined);
+  assert.ok(!isDefault({ ...defaults(W, H), crop: { ...defaults(W, H).crop, size: { w: 1080, h: 1080 } } }, W, H));
+});

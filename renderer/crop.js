@@ -7,6 +7,8 @@ export const RATIOS = [
   { v: '1', label: '1:1' },
   { v: '0.8', label: '4:5' },
   { v: '0.75', label: '3:4' },
+  { v: '0.6667', label: '2:3' },
+  { v: '0.5625', label: '9:16' },
   { v: '1.7778', label: '16:9' },
   { v: 'free', label: '自由' },
 ];
@@ -77,4 +79,11 @@ export function scaleCrop(C, fromW, fromH, W, H) {
   const out = { ...C, cx: C.cx * k, cy: C.cy * k, w: C.w * k, h: C.h * k };
   if (!fits(out, out, W, H)) fitCrop(out, W, H);
   return out;
+}
+
+/** 比例值是否合法：清單裡的，或「固定尺寸」換算出來的數字（0.1～10） */
+export function validRatio(v) {
+  if (RATIOS.some((r) => r.v === v)) return true;
+  const n = Number(v);
+  return typeof v === 'string' && Number.isFinite(n) && n >= 0.1 && n <= 10;
 }

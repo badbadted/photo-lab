@@ -1,7 +1,7 @@
 // 手機版介面：快速套風格、裁切、存到相簿。修圖核心與電腦版共用。
 import { Pipeline } from './pipeline.js';
 import { decode } from './decode.js';
-import { ADJ, defaults, clone, isDefault, sanitize, History, SCHEMA_VERSION } from './settings.js';
+import { ADJ, defaults, clone, isDefault, sanitize, History, SCHEMA_VERSION, fmtValue } from './settings.js';
 import { STYLES, styleById, customStyles, getCustomStyles, setCustomStyles, captureStyle, adoptOrphan, isCustomId, sanitizeCustomStyle } from './styles.js';
 import { autoTone, autoWhiteBalance, pixelStats, untouchedForAuto } from './auto.js';
 import { ratioOf, fits, fitCrop, tryRect, rotatedBounds, resizeFromCorner } from './crop.js';
@@ -9,7 +9,9 @@ import { download } from './platform.js';
 
 const lab = window.lab;
 const MAX_LONG = 4096; // 手機記憶體有限，照片長邊縮到 4096 內再修（約 1200 萬畫素）
-const RATIOS = [['orig', '原始'], ['1', '1:1'], ['0.8', '4:5'], ['0.5625', '9:16'], ['1.7778', '16:9'], ['free', '自由']];
+const RATIOS = [['orig', '原始'], ['1', '1:1'], ['0.8', '4:5'], ['0.75', '3:4'], ['0.6667', '2:3'], ['0.5625', '9:16'], ['1.7778', '16:9']];
+const SIZES = [['IG 直式', 1080, 1350], ['IG 方形', 1080, 1080], ['限時動態', 1080, 1920], ['橫式 HD', 1920, 1080]];
+const ADJ_GROUPS = [['light', '光線', ['exp', 'con', 'hl', 'sh', 'wh', 'bl']], ['wb', '白平衡', ['temp', 'tint']], ['color', '色彩', ['vib', 'sat']], ['vig', '暈映', ['vig', 'mid', 'round', 'feat', 'vhl']]];
 const pref = {
   get(k, d) { try { const v = localStorage.getItem('photolab.m.' + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
   set(k, v) { try { localStorage.setItem('photolab.m.' + k, JSON.stringify(v)); } catch { /* 存不了就算了 */ } },
@@ -22,9 +24,10 @@ document.head.append(link);
 document.body.className = 'm';
 document.body.innerHTML = `
 <div class="m-top"><button class="m-tb" id="mOpen">開啟</button><span class="m-count" id="mCount"></span><button class="m-tb pri" id="mSave" disabled>存到相簿</button></div>
+<div class="m-info" id="mInfo" hidden><span class="m-tag" id="mTag"></span><span id="mInfoText"></span></div>
 <div class="m-stage" id="mStage">
   <div class="m-empty" id="mEmpty"><div class="m-logo">◐</div><b>Photo Lab</b><span>按左上「開啟」從相簿選照片<br>可以一次選很多張</span><span class="m-small">照片只在這支手機上處理，不會上傳</span></div>
-  <div class="m-cw" id="mCw" hidden><canvas id="mImg"></canvas><canvas id="mOv"></canvas></div>
+  <div class="m-cw" id="mCw" hidden><canvas id="mImg"></canvas><canvas id="mOv"></canvas><div class="m-dims" id="mDims" hidden></div></div>
   <div class="m-busy" id="mBusy" hidden><div class="m-spin"></div><span id="mBusyText"></span></div>
 </div>
 <div class="m-dots" id="mDots"></div>
@@ -33,11 +36,18 @@ document.body.innerHTML = `
   <div class="m-strip" id="mStrip"></div>
   <div class="m-amt" id="mAmtRow"><span>強度</span><input type="range" id="mAmt" min="0" max="100" value="100"><output id="mAmtO">100</output></div>
 </div>
-<div class="m-panel" id="pCrop" hidden>
-  <div class="m-chips" id="mChips"></div>
-  <div class="m-amt"><span>拉直</span><input type="range" id="mAngle" min="-45" max="45" step="0.5" value="0"><output id="mAngleO">0°</output></div>
+<div class="m-panel" id="pAdjust" hidden>
+  <div class="m-seg" id="mAdjSeg"></div>
+  <button class="m-autob" id="mAutoBtn">✦ 自動</button>
+  <div id="mSliders"></div>
 </div>
-<div class="m-tabs"><button class="m-tab on" id="tStyle"><b>◐</b>風格</button><button class="m-tab" id="tCrop"><b>⛶</b>裁切</button><button class="m-tab" id="tUndo"><b>↺</b>復原</button></div>
+<div class="m-panel" id="pCrop" hidden>
+  <div class="m-seg" id="mCropSeg"><button data-m="free">自由</button><button data-m="ratio">比例</button><button data-m="size">尺寸</button></div>
+  <div class="m-chips" id="mChips"></div>
+  <div class="m-custom" id="mCustom" hidden><span>自訂</span><input type="number" id="mSizeW" min="16" max="10000" inputmode="numeric"><span>×</span><input type="number" id="mSizeH" min="16" max="10000" inputmode="numeric"><span>像素</span></div>
+  <div class="m-tools"><button class="m-flip" id="mFlip">⇄ 直橫</button><span>拉直</span><input type="range" id="mAngle" min="-45" max="45" step="0.5" value="0"><output id="mAngleO">0°</output></div>
+</div>
+<div class="m-tabs"><button class="m-tab on" id="tStyle"><b>◐</b>風格</button><button class="m-tab" id="tAdjust"><b>☀</b>調整</button><button class="m-tab" id="tCrop"><b>⛶</b>裁切</button><button class="m-tab" id="tUndo"><b>↺</b>復原</button></div>
 <div class="m-sheet-bg" id="mSheetBg" hidden><div class="m-sheet" id="mSheet"></div></div>
 <div class="m-toast" id="mToast" hidden></div>`;
 const $ = (id) => document.getElementById(id);
@@ -77,6 +87,7 @@ async function show(i) {
     st.idx = i;
     if (img.preview) toast('這張 RAW 太大，手機記憶體不夠整張解開，改用檔案內嵌的預覽圖修（畫質接近一般照片）');
     st.cur = st.states.get(id) || await freshState(id, img.width, img.height);
+    st.cur.kind = img.kind === 'raw' ? 'RAW' : img.preview ? 'RAW 預覽' : (id.match(/\.([^.]+)$/)?.[1] || '').toUpperCase().replace('JPG', 'JPEG');
     st.states.set(id, st.cur);
     $('mEmpty').hidden = true; $('mCw').hidden = false; $('mSave').disabled = false;
     sync(); layout(); renderDots();
@@ -273,48 +284,101 @@ function styleMenu(s) {
 async function saveStyles() { try { await lab.stylesWrite(getCustomStyles()); return true; } catch (e) { toast(`存不進去：${e.message}`); return false; } }
 lab.stylesRead().then((l) => { setCustomStyles(l); renderStrip(); }).catch(() => {});
 
-// ---------- 裁切 ----------
-$('mChips').replaceChildren(...RATIOS.map(([v, label]) => {
-  const b = document.createElement('button'); b.className = 'm-chip'; b.dataset.v = v; b.textContent = label;
-  b.onclick = () => setRatio(v); return b;
-}), (() => { const b = document.createElement('button'); b.className = 'm-chip'; b.id = 'mFlip'; b.textContent = '⇄ 直橫'; b.onclick = flip; return b; })());
+// ---------- 調整 ----------
+let adjGroup = 'light';
+$('mAdjSeg').replaceChildren(...ADJ_GROUPS.map(([g, label]) => {
+  const b = document.createElement('button'); b.dataset.g = g; b.textContent = label;
+  b.onclick = () => { adjGroup = g; renderSliders(); }; return b;
+}));
+function renderSliders() {
+  for (const b of $('mAdjSeg').children) b.classList.toggle('on', b.dataset.g === adjGroup);
+  const keys = ADJ_GROUPS.find(([g]) => g === adjGroup)[2];
+  $('mSliders').replaceChildren(...keys.map((k) => {
+    const [mn, mx, d, name, step] = ADJ[k];
+    const row = document.createElement('div'); row.className = 'm-sl'; row.dataset.k = k;
+    const lab = document.createElement('span'); lab.textContent = name;
+    const inp = document.createElement('input'); inp.type = 'range'; inp.min = mn; inp.max = mx; inp.step = step || 1; inp.id = 'mS_' + k;
+    if (k === 'temp' || k === 'tint') inp.className = k;
+    const out = document.createElement('output');
+    row.append(lab, inp, out);
+    let before = d;
+    inp.addEventListener('pointerdown', () => { before = st.cur?.S[k]; });
+    inp.addEventListener('input', () => { if (!st.cur) return; st.cur.S[k] = +inp.value; paintSlider(k); redraw(); });
+    inp.addEventListener('change', () => { if (st.cur && st.cur.S[k] !== before) commit(`${name} ${fmtValue(k, st.cur.S[k])}`); });
+    const reset = () => { if (!st.cur || st.cur.S[k] === d) return; st.cur.S[k] = d; paintSlider(k); redraw(); commit(`${name} 歸零`); };
+    inp.addEventListener('dblclick', reset); lab.addEventListener('dblclick', reset);
+    return row;
+  }));
+  for (const k of keys) paintSlider(k);
+}
+function paintSlider(k) {
+  const inp = $('mS_' + k);
+  if (!inp || !st.cur) return;
+  const v = st.cur.S[k];
+  inp.value = v;
+  inp.nextElementSibling.textContent = fmtValue(k, v);
+  inp.parentElement.classList.toggle('ch', v !== ADJ[k][2]);
+}
+$('mAutoBtn').onclick = () => {
+  if (!st.cur) return;
+  if (!autoCorrect(st.cur.S)) return toast('這張照片不需要調整');
+  sync(); redraw(); commit('自動調整');
+};
 
-function enterCrop() {
-  if (!st.cur || st.crop) return;
-  st.crop = true; st.cropBefore = clone(st.cur.S.crop);
-  $('pStyle').hidden = true; $('pCrop').hidden = false;
-  $('tStyle').classList.remove('on'); $('tCrop').classList.add('on');
-  $('mOpen').textContent = '取消'; $('mSave').textContent = '完成';
-  $('mCount').textContent = '裁切';
-  $('mDots').hidden = true;
-  ov.style.pointerEvents = 'auto';
-  sync(); layout();
+// ---------- 裁切 ----------
+// 三種：自由（任意拉）、比例（照字面：4:5、9:16 是直的）、尺寸（輸出固定像素，框鎖該比例）
+let cropMode = 'ratio';
+const modeOf = (C) => (C.size ? 'size' : C.ratio === 'free' ? 'free' : 'ratio');
+for (const b of $('mCropSeg').children) b.onclick = () => setCropMode(b.dataset.m);
+function setCropMode(m) {
+  const C = st.cur.S.crop;
+  cropMode = m;
+  if (m === 'free') { delete C.size; C.ratio = 'free'; C.flip = false; }
+  else if (m === 'ratio') { delete C.size; if (C.ratio === 'free' || !RATIOS.some(([v]) => v === C.ratio)) C.ratio = 'orig'; C.flip = false; fitCrop(C, st.cur.W, st.cur.H); }
+  else if (!C.size) setSize(SIZES[0][1], SIZES[0][2]);
+  renderCropChips(); sync(); redraw();
 }
-function leaveCrop(keep) {
-  if (!st.crop) return;
-  if (!keep) st.cur.S.crop = st.cropBefore;
-  const changed = JSON.stringify(st.cur.S.crop) !== JSON.stringify(st.cropBefore);
-  st.crop = false;
-  $('pStyle').hidden = false; $('pCrop').hidden = true;
-  $('tStyle').classList.add('on'); $('tCrop').classList.remove('on');
-  $('mOpen').textContent = '開啟'; $('mSave').textContent = '存到相簿';
-  ov.style.pointerEvents = 'none';
-  renderDots(); sync(); layout();
-  if (keep && changed) commit('裁切');
+function setSize(w, h) {
+  const C = st.cur.S.crop;
+  C.size = { w, h }; C.ratio = String(+(w / h).toFixed(6)); C.flip = false;
+  fitCrop(C, st.cur.W, st.cur.H);
 }
-const cancelCrop = () => leaveCrop(false);
-function setRatio(v) {
-  const C = st.cur.S.crop, { W, H } = st.cur;
-  C.ratio = v;
-  // 手機版照字面：4:5、9:16 就是直的（拍 IG 常用），16:9 是橫的；原始比例跟著照片；要反過來按「⇄ 直橫」
-  C.flip = false;
-  fitCrop(C, W, H); sync(); redraw();
+function renderCropChips() {
+  const C = st.cur?.S.crop;
+  const box = $('mChips');
+  $('mCustom').hidden = cropMode !== 'size';
+  box.hidden = cropMode === 'free';
+  if (cropMode === 'ratio') {
+    box.replaceChildren(...RATIOS.map(([v, label]) => {
+      const b = document.createElement('button'); b.className = 'm-chip'; b.dataset.v = v; b.textContent = label;
+      b.onclick = () => { const c = st.cur.S.crop; c.ratio = v; c.flip = false; fitCrop(c, st.cur.W, st.cur.H); sync(); redraw(); };
+      return b;
+    }));
+  } else if (cropMode === 'size') {
+    box.replaceChildren(...SIZES.map(([label, w, h]) => {
+      const b = document.createElement('button'); b.className = 'm-chip'; b.dataset.size = `${w}x${h}`;
+      b.textContent = label;
+      const sm = document.createElement('small'); sm.textContent = `${w}×${h}`; b.append(sm);
+      b.onclick = () => { setSize(w, h); sync(); redraw(); };
+      return b;
+    }));
+    if (C?.size) { $('mSizeW').value = C.size.w; $('mSizeH').value = C.size.h; }
+  }
+}
+for (const id of ['mSizeW', 'mSizeH']) {
+  $(id).addEventListener('change', () => {
+    const w = Math.round(+$('mSizeW').value), h = Math.round(+$('mSizeH').value);
+    if (!(w >= 16 && w <= 10000 && h >= 16 && h <= 10000)) { toast('尺寸要在 16～10000 像素之間'); sync(); return; }
+    setSize(w, h); sync(); redraw();
+  });
 }
 function flip() {
   const C = st.cur.S.crop;
-  if (C.ratio === 'free') return;
-  C.flip = !C.flip; fitCrop(C, st.cur.W, st.cur.H); redraw();
+  if (C.size) setSize(C.size.h, C.size.w); // 尺寸模式：寬高對調
+  else if (C.ratio !== 'free') { C.flip = !C.flip; fitCrop(C, st.cur.W, st.cur.H); }
+  sync(); redraw();
 }
+$('mFlip').onclick = flip;
 {
   const a = $('mAngle');
   a.addEventListener('input', () => {
@@ -322,6 +386,11 @@ function flip() {
     C.angle = +a.value; $('mAngleO').textContent = `${C.angle.toFixed(1)}°`;
     fitCrop(C, st.cur.W, st.cur.H); layout();
   });
+}
+function cropDims() {
+  const c = st.cur.S.crop, w = Math.round(c.w), h = Math.round(c.h);
+  if (!c.size) return `${w}×${h}`;
+  return `輸出 ${c.size.w}×${c.size.h}${w < c.size.w ? '（照片不夠大，會放大）' : ''}`;
 }
 function fromEvent(e) {
   const f = frameOf(), b = ov.getBoundingClientRect();
@@ -353,28 +422,73 @@ ov.addEventListener('pointermove', (e) => {
   } else {
     tryRect(C, { cx: C.cx, cy: C.cy, w: C.w, h: C.h }, resizeFromCorner(r0, d.ux, d.uy, p, ratioOf(C, W, H), Math.min(W, H) * 0.05), W, H);
   }
+  $('mDims').textContent = cropDims();
   redraw();
 });
 for (const ev of ['pointerup', 'pointercancel']) ov.addEventListener(ev, () => { st.drag = null; });
 
 // ---------- 分頁 ----------
-$('tStyle').onclick = () => leaveCrop(true);
-$('tCrop').onclick = () => enterCrop();
+let tab = 'style';
+function setTab(t) {
+  if (!st.cur && t !== 'style') return;
+  if (st.crop && t !== 'crop') leaveCrop(true);
+  tab = t;
+  $('pStyle').hidden = t !== 'style'; $('pAdjust').hidden = t !== 'adjust'; $('pCrop').hidden = t !== 'crop';
+  for (const [id, n] of [['tStyle', 'style'], ['tAdjust', 'adjust'], ['tCrop', 'crop']]) $(id).classList.toggle('on', n === t);
+  if (t === 'adjust') renderSliders();
+  if (t === 'crop') enterCrop();
+}
+function enterCrop() {
+  if (!st.cur || st.crop) return;
+  st.crop = true; st.cropBefore = clone(st.cur.S.crop);
+  cropMode = modeOf(st.cur.S.crop);
+  $('mOpen').textContent = '取消'; $('mSave').textContent = '完成';
+  $('mCount').textContent = '裁切';
+  $('mDots').hidden = true;
+  ov.style.pointerEvents = 'auto';
+  renderCropChips(); sync(); layout();
+}
+function leaveCrop(keep) {
+  if (!st.crop) return;
+  if (!keep) st.cur.S.crop = st.cropBefore;
+  const changed = JSON.stringify(st.cur.S.crop) !== JSON.stringify(st.cropBefore);
+  st.crop = false;
+  $('mOpen').textContent = '開啟'; $('mSave').textContent = '存到相簿';
+  ov.style.pointerEvents = 'none';
+  if (tab === 'crop') { tab = 'style'; $('pStyle').hidden = false; $('pCrop').hidden = true; $('tStyle').classList.add('on'); $('tCrop').classList.remove('on'); }
+  renderDots(); sync(); layout();
+  if (keep && changed) commit('裁切');
+}
+const cancelCrop = () => leaveCrop(false);
+$('tStyle').onclick = () => setTab('style');
+$('tAdjust').onclick = () => setTab('adjust');
+$('tCrop').onclick = () => setTab('crop');
 $('tUndo').onclick = () => {
   if (!st.cur) return;
-  if (st.crop) { st.cur.S.crop = clone(st.cropBefore); sync(); layout(); return; }
+  if (st.crop) { st.cur.S.crop = clone(st.cropBefore); cropMode = modeOf(st.cur.S.crop); renderCropChips(); sync(); layout(); return; }
   if (!st.cur.hist.canUndo) return toast('已經是最原始的樣子');
   st.cur.S = st.cur.hist.undo(); sync(); layout(); persist();
 };
 
 function sync() {
   if (!st.cur) return;
-  const S = st.cur.S;
+  const S = st.cur.S, C = S.crop;
   $('mAmt').value = S.amt; $('mAmtO').textContent = Math.round(S.amt);
   $('mAmtRow').classList.toggle('off', S.style === 'none');
-  $('mAngle').value = S.crop.angle; $('mAngleO').textContent = `${S.crop.angle.toFixed(1)}°`;
-  for (const b of $('mChips').querySelectorAll('.m-chip[data-v]')) b.classList.toggle('on', b.dataset.v === S.crop.ratio);
-  $('mFlip').disabled = S.crop.ratio === 'free';
+  $('mAngle').value = C.angle; $('mAngleO').textContent = `${C.angle.toFixed(1)}°`;
+  for (const b of $('mCropSeg').children) b.classList.toggle('on', b.dataset.m === cropMode);
+  for (const b of $('mChips').querySelectorAll('.m-chip[data-v]')) b.classList.toggle('on', !C.size && b.dataset.v === C.ratio);
+  for (const b of $('mChips').querySelectorAll('.m-chip[data-size]')) b.classList.toggle('on', !!C.size && b.dataset.size === `${C.size.w}x${C.size.h}`);
+  if (C.size) { $('mSizeW').value = C.size.w; $('mSizeH').value = C.size.h; }
+  $('mFlip').disabled = cropMode === 'free';
+  $('mDims').hidden = !st.crop; $('mDims').textContent = cropDims();
+  // 檔案資訊：看得出是不是 RAW
+  $('mInfo').hidden = false;
+  const tag = $('mTag');
+  tag.textContent = st.cur.kind || '';
+  tag.className = 'm-tag ' + (st.cur.kind === 'RAW' ? 'raw' : st.cur.kind === 'RAW 預覽' ? 'pv' : '');
+  $('mInfoText').textContent = `${nameOf(st.cur.id)} · ${st.cur.W}×${st.cur.H}`;
+  if (tab === 'adjust') for (const k of ADJ_GROUPS.find(([g]) => g === adjGroup)[2]) paintSlider(k);
   renderStrip();
 }
 
@@ -383,8 +497,9 @@ $('mSave').onclick = () => {
   if (st.crop) return leaveCrop(true);
   if (!st.cur) return;
   if (st.files.length < 2) return exportSet([st.idx]);
-  const s = styleById(st.cur.S.style), r = RATIOS.find(([v]) => v === st.cur.S.crop.ratio)?.[1];
-  sheet(`<b>存到相簿</b><span>風格「${esc(s.name)}」${st.cur.S.style !== 'none' ? ` ${Math.round(st.cur.S.amt)}%` : ''}${st.cur.S.crop.ratio !== 'orig' ? `，裁切 ${r}` : ''}</span>`, [
+  const s = styleById(st.cur.S.style), C = st.cur.S.crop;
+  const r = C.size ? `${C.size.w}×${C.size.h}` : C.ratio === 'free' ? '自由' : RATIOS.find(([v]) => v === C.ratio)?.[1];
+  sheet(`<b>存到相簿</b><span>風格「${esc(s.name)}」${st.cur.S.style !== 'none' ? ` ${Math.round(st.cur.S.amt)}%` : ''}${C.ratio !== 'orig' || C.size ? `，裁切 ${r}` : ''}</span>`, [
     ['只存這一張', () => exportSet([st.idx]), 'pri'],
     [`套用到全部 ${st.files.length} 張再一次存`, () => exportSet(st.files.map((_, i) => i))],
   ], '「全部」會每張各自先自動校正（如果有開）再套同一個風格；裁切比例照用，框放正中間。');
@@ -409,8 +524,10 @@ async function exportSet(list) {
         const S = job.S;
         if (autoBox.checked && master.style !== 'none' && untouchedForAuto(S)) autoCorrect(S);
         S.style = master.style; S.amt = master.amt;
-        if (master.crop.ratio !== 'orig' || master.crop.flip) {
+        if (master.crop.ratio !== 'orig' || master.crop.flip || master.crop.size) {
           S.crop = { ...S.crop, ratio: master.crop.ratio, flip: master.crop.flip, angle: 0 };
+          if (master.crop.size) S.crop.size = { ...master.crop.size }; else delete S.crop.size;
+          if (S.crop.ratio === 'free') S.crop.ratio = String(+(master.crop.w / master.crop.h).toFixed(6)); // 自由框：照同一個長寬比
           fitCrop(S.crop, job.W, job.H);
         }
         job.hist.push('套用到全部', S);
@@ -446,8 +563,13 @@ async function exportSet(list) {
 async function renderJpeg(job, id) {
   const c = job.S.crop, w = Math.max(1, Math.round(c.w)), h = Math.max(1, Math.round(c.h));
   const px = pipe.readPixels(job.S, { cx: c.cx, cy: c.cy, w: c.w, h: c.h }, w, h);
-  const cnv = document.createElement('canvas'); cnv.width = w; cnv.height = h;
+  let cnv = document.createElement('canvas'); cnv.width = w; cnv.height = h;
   cnv.getContext('2d').putImageData(new ImageData(px, w, h), 0, 0);
+  if (c.size && (c.size.w !== w || c.size.h !== h)) { // 「尺寸」：縮放成剛好指定的像素
+    const out = document.createElement('canvas'); out.width = c.size.w; out.height = c.size.h;
+    const g = out.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(cnv, 0, 0, out.width, out.height);
+    cnv.width = cnv.height = 0; cnv = out;
+  }
   const blob = await new Promise((r) => cnv.toBlob(r, 'image/jpeg', 0.92));
   cnv.width = cnv.height = 0;
   return new File([blob], nameOf(id).replace(/\.[^.]+$/, '') + '_edit.jpg', { type: 'image/jpeg', lastModified: Date.now() });
@@ -499,4 +621,4 @@ function toast(msg) {
 window.addEventListener('pagehide', () => { persist(); });
 
 // 測試用掛鉤
-window.__m = { st, show, pickStyle, enterCrop, leaveCrop, setRatio, exportSet, renderJpeg, pipe, registerFiles: (fl) => lab.registerFiles(fl) };
+window.__m = { st, show, pickStyle, setTab, setCropMode, setSize, flip, exportSet, renderJpeg, pipe, registerFiles: (fl) => lab.registerFiles(fl) };

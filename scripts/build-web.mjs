@@ -23,5 +23,24 @@ const src = await fs.readFile(dec, 'utf8');
 if (src.split(ELECTRON_IMPORT).length !== 2) throw new Error(`decode.js 裡找不到唯一一處 ${ELECTRON_IMPORT}，網頁版匯入路徑沒改到`);
 await fs.writeFile(dec, src.replace(ELECTRON_IMPORT, WEB_IMPORT));
 
+// 每個檔案引用都加版本標記：更新後瀏覽器不會拿快取的舊模組跟新模組混用（GitHub Pages 會讓瀏覽器快取 10 分鐘）
+const V = Date.now().toString(36);
+const tag = (u) => `${u}?v=${V}`;
+for (const f of await fs.readdir(OUT)) {
+  const fp = path.join(OUT, f);
+  if (f.endsWith('.js')) {
+    let t = await fs.readFile(fp, 'utf8');
+    t = t.replace(/(from\s+['"])(\.\/[^'"?]+\.js)(['"])/g, (_, a, u, b) => a + tag(u) + b)
+      .replace(/(import\(\s*['"])(\.\/[^'"?]+\.js)(['"]\s*\))/g, (_, a, u, b) => a + tag(u) + b)
+      .replace(/^(import\s+['"])(\.\/[^'"?]+\.js)(['"])/gm, (_, a, u, b) => a + tag(u) + b)
+      .replace("link.href = 'mobile.css'", `link.href = '${tag('mobile.css')}'`);
+    await fs.writeFile(fp, t);
+  } else if (f === 'index.html') {
+    let t = await fs.readFile(fp, 'utf8');
+    t = t.replace('src="entry.js"', `src="${tag('entry.js')}"`).replace('href="style.css"', `href="${tag('style.css')}"`);
+    await fs.writeFile(fp, t);
+  }
+}
+
 const files = await fs.readdir(OUT, { recursive: true });
 console.log(`網頁版已產生：${OUT}（${files.length} 個檔案）`);

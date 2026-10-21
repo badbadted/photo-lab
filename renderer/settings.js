@@ -1,5 +1,5 @@
 // 調整項目定義、預設值、歷史紀錄（純邏輯，可在 node 測）
-import { defaultCrop, RATIOS } from './crop.js';
+import { defaultCrop, validRatio } from './crop.js';
 import { allStyles } from './styles.js';
 
 // key: [最小, 最大, 預設, 名稱, 步進]
@@ -36,7 +36,7 @@ export function isDefault(s, W, H) {
   for (const k in ADJ) if (!near(s[k], d[k])) return false;
   if (s.style !== 'none' || !near(s.amt, 100)) return false;
   const c = s.crop;
-  return c.ratio === 'orig' && !c.flip && near(c.angle, 0) && near(c.cx, 0) && near(c.cy, 0) && near(c.w, W) && near(c.h, H);
+  return c.ratio === 'orig' && !c.flip && !c.size && near(c.angle, 0) && near(c.cx, 0) && near(c.cy, 0) && near(c.w, W) && near(c.h, H);
 }
 
 /** 讀進來的設定一律過濾：未知欄位丟掉、數值夾在範圍內 */
@@ -51,7 +51,10 @@ export function sanitize(raw, W, H) {
   if (Number.isFinite(Number(raw.amt))) s.amt = Math.min(100, Math.max(0, Number(raw.amt)));
   const c = raw.crop;
   if (c && typeof c === 'object') {
-    if (RATIOS.some((r) => r.v === c.ratio)) s.crop.ratio = c.ratio;
+    if (validRatio(c.ratio)) s.crop.ratio = c.ratio;
+    // 手機版「尺寸」：存照片時縮放成固定像素
+    const sw = Math.round(Number(c.size?.w)), sh = Math.round(Number(c.size?.h));
+    if (sw >= 16 && sw <= 10000 && sh >= 16 && sh <= 10000) s.crop.size = { w: sw, h: sh };
     s.crop.flip = !!c.flip;
     for (const k of ['angle', 'cx', 'cy', 'w', 'h']) if (Number.isFinite(Number(c[k]))) s.crop[k] = Number(c[k]);
     s.crop.angle = Math.min(45, Math.max(-45, s.crop.angle));
