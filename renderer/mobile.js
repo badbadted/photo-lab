@@ -75,6 +75,7 @@ async function show(i) {
     if (img.kind === 'raw') pipe.setLinear16(img.data, img.width, img.height);
     else { pipe.setSRGB8(img.bitmap); img.bitmap.close?.(); }
     st.idx = i;
+    if (img.preview) toast('這張 RAW 太大，手機記憶體不夠整張解開，改用檔案內嵌的預覽圖修（畫質接近一般照片）');
     st.cur = st.states.get(id) || await freshState(id, img.width, img.height);
     st.states.set(id, st.cur);
     $('mEmpty').hidden = true; $('mCw').hidden = false; $('mSave').disabled = false;
