@@ -7,12 +7,59 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "dist": "electron-builder --win"
   },
   "dependencies": {
     "libraw-wasm": "1.6.0"
   },
   "devDependencies": {
-    "electron": "44.9.1"
+    "electron": "44.9.1",
+    "electron-builder": "^26.15.3",
+    "rcedit": "^5.0.2"
+  },
+  "build": {
+    "appId": "com.badbadted.photolab",
+    "productName": "Photo Lab",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "renderer/**/*",
+      "build/icon.png",
+      "package.json"
+    ],
+    "afterPack": "build/after-pack.cjs",
+    "win": {
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "Photo Lab",
+      "artifactName": "PhotoLab-安裝版-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "PhotoLab-免安裝-${version}.${ext}"
+    }
   }
 }

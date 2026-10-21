@@ -49,7 +49,7 @@ let win;
 function createWindow() {
   win = new BrowserWindow({
     width: 1440, height: 900, minWidth: 1000, minHeight: 640,
-    backgroundColor: '#1e1f22', title: 'Photo Lab', autoHideMenuBar: true,
+    backgroundColor: '#1e1f22', title: 'Photo Lab', autoHideMenuBar: true, icon: path.join(ROOT, 'build', 'icon.png'),
     webPreferences: { preload: path.join(ROOT, 'preload.cjs'), contextIsolation: true, sandbox: true, nodeIntegration: false },
   });
   win.removeMenu();
