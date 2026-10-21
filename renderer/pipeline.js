@@ -2,7 +2,13 @@
 // 螢幕預覽、直方圖、全尺寸匯出共用同一支 shader，保證「看到的＝匯出的」。
 import { resolveStyle } from './styles.js';
 
-const ADJ_KEYS = ['temp', 'tint', 'exp', 'con', 'hl', 'sh', 'wh', 'bl', 'vib', 'sat'];
+// 拉桿 key 與範圍（跟 settings.js 的 ADJ 一致；風格疊上去後夾在範圍內）
+const RANGES = {
+  temp: [-100, 100], tint: [-100, 100], exp: [-5, 5], con: [-100, 100], hl: [-100, 100], sh: [-100, 100],
+  wh: [-100, 100], bl: [-100, 100], vib: [-100, 100], sat: [-100, 100],
+  vig: [-100, 100], mid: [0, 100], round: [-100, 100], feat: [0, 100], vhl: [0, 100],
+};
+const ADJ_KEYS = Object.keys(RANGES);
 
 const VS = `#version 300 es
 in vec2 aPos;
@@ -223,15 +229,15 @@ export class Pipeline {
     gl.uniform3f(u.uBg, bg[0], bg[1], bg[2]);
     gl.uniform1i(u.uOrig, opts.orig ? 1 : 0);
     gl.uniform1i(u.uRaw, this.raw ? 1 : 0);
-    const n = (v) => v / 100, st = resolveStyle(s, ADJ_KEYS), j = st.adj;
+    const n = (v) => v / 100, st = resolveStyle(s, ADJ_KEYS, RANGES), j = st.adj;
     gl.uniform1f(u.uTemp, n(j.temp)); gl.uniform1f(u.uTint, n(j.tint)); gl.uniform1f(u.uExp, j.exp);
     gl.uniform1f(u.uCon, n(j.con)); gl.uniform1f(u.uHl, n(j.hl)); gl.uniform1f(u.uSh, n(j.sh));
     gl.uniform1f(u.uWh, n(j.wh)); gl.uniform1f(u.uBl, n(j.bl)); gl.uniform1f(u.uVib, n(j.vib)); gl.uniform1f(u.uSat, n(j.sat));
     gl.uniform1f(u.uFade, st.fade); gl.uniform1f(u.uGC, st.gc); gl.uniform1f(u.uGrain, st.grain);
     gl.uniform1i(u.uMono, st.mono ? 1 : 0);
     gl.uniform3f(u.uSplitS, ...st.splitS); gl.uniform3f(u.uSplitH, ...st.splitH);
-    gl.uniform1f(u.uVig, n(s.vig)); gl.uniform1f(u.uMid, n(s.mid)); gl.uniform1f(u.uRound, n(s.round));
-    gl.uniform1f(u.uFeat, n(s.feat)); gl.uniform1f(u.uVhl, n(s.vhl));
+    gl.uniform1f(u.uVig, n(j.vig)); gl.uniform1f(u.uMid, n(j.mid)); gl.uniform1f(u.uRound, n(j.round));
+    gl.uniform1f(u.uFeat, n(j.feat)); gl.uniform1f(u.uVhl, n(j.vhl));
   }
 
   #draw(tx, ty, tw, th) {

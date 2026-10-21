@@ -11,6 +11,8 @@ contextBridge.exposeInMainWorld('lab', {
   chooseDir: (def) => ipcRenderer.invoke('choose-dir', def),
   exportSave: (dir, base, ext, bytes) => ipcRenderer.invoke('export-save', dir, base, ext, bytes),
   reveal: (p) => ipcRenderer.invoke('reveal', p),
+  stylesRead: () => ipcRenderer.invoke('styles-read'),
+  stylesWrite: (list) => ipcRenderer.invoke('styles-write', list),
   pathForFile: (file) => webUtils.getPathForFile(file),
   log: (msg) => ipcRenderer.send('log', String(msg)),
 });

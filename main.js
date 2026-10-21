@@ -120,6 +120,18 @@ if (!gotTheLock) {
       await fs.mkdir(dir, { recursive: true });
       return writeNew(dir, base, ext, Buffer.from(bytes));
     });
+    // 我的風格：存在 App 自己的資料夾（%APPDATA%\photo-lab\styles.json），內容由畫面端清洗
+    const stylesFile = () => path.join(app.getPath('userData'), 'styles.json');
+    ipcMain.handle('styles-read', async () => {
+      try { const d = JSON.parse(await fs.readFile(stylesFile(), 'utf8')); return Array.isArray(d?.styles) ? d.styles : []; } catch { return []; }
+    });
+    ipcMain.handle('styles-write', async (_e, list) => {
+      if (!Array.isArray(list) || list.length > 500) throw new Error('風格清單格式不正確');
+      const target = stylesFile(), tmp = `${target}.${randomUUID()}.tmp`;
+      await fs.writeFile(tmp, JSON.stringify({ app: 'photo-lab', version: 1, styles: list }, null, 2), { encoding: 'utf8', flag: 'wx' });
+      try { await fs.rename(tmp, target); } catch (e) { await fs.rm(tmp, { force: true }); throw e; }
+      return true;
+    });
     ipcMain.handle('reveal', (_e, p) => shell.showItemInFolder(p));
     ipcMain.on('log', (_e, msg) => log('renderer', msg));
 

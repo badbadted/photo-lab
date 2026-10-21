@@ -4,7 +4,7 @@ import { decode } from './decode.js';
 import { fmtShutter } from './exif.js';
 import { ADJ, GROUPS, SCHEMA_VERSION, defaults, clone, isDefault, sanitize, fmtValue, History } from './settings.js';
 import { RATIOS, ratioOf, fits, fitCrop, tryRect, rotatedBounds, resizeFromCorner, scaleCrop, defaultCrop } from './crop.js';
-import { STYLES, styleById } from './styles.js';
+import { STYLES, styleById, customStyles, getCustomStyles, setCustomStyles, captureStyle, adoptOrphan, describeStyle, isCustomId, sanitizeCustomStyle } from './styles.js';
 import { autoTone, autoWhiteBalance, pixelStats } from './auto.js';
 
 const $ = (id) => document.getElementById(id);
@@ -56,8 +56,8 @@ function syncUI() {
   $('amt').value = S.amt;
   $('o_amt').textContent = Math.round(S.amt);
   $('row_amt').classList.toggle('off', S.style === 'none');
-  $('styleDesc').textContent = styleById(S.style).desc;
-  for (const el of document.querySelectorAll('.st')) el.classList.toggle('on', el.dataset.id === S.style);
+  $('styleDesc').textContent = describeStyle(styleById(S.style));
+  renderStyleGrids();
 }
 
 function drawHistory() {
@@ -129,15 +129,151 @@ function redrawNow() {
 }
 
 // ---------- 風格 ----------
-for (const s of STYLES) {
-  $('styles').insertAdjacentHTML('beforeend', `<div class="st" data-id="${s.id}" title="${s.desc}"><canvas width="150" height="100"></canvas><span>${s.name}</span></div>`);
+function styleCard(s, mine) {
+  const el = document.createElement('div');
+  el.className = 'st' + (mine ? ' mine' : '') + (s.orphan ? ' orphan' : '');
+  el.dataset.id = s.id;
+  el.title = describeStyle(s);
+  const c = document.createElement('canvas'); c.width = 150; c.height = 100;
+  const name = document.createElement('span'); name.textContent = s.orphan ? `${s.name}・舊版` : s.name; // 名稱是使用者輸入，一律用 textContent
+  el.append(c, name);
+  if (mine && !s.orphan) { const m = document.createElement('div'); m.className = 'more'; m.textContent = '⋯'; m.title = '更多'; el.append(m); }
+  return el;
 }
-$('styles').addEventListener('click', (e) => {
+for (const s of STYLES) $('styles').append(styleCard(s, false));
+
+// 「我的風格」只在清單變動時重建；已刪除／舊版的只有目前照片在用時才顯示
+let mineKey = null;
+function renderStyleGrids() {
+  const list = customStyles().filter((s) => !s.orphan || s.id === st.S?.style);
+  const key = list.map((s) => `${s.id}:${s.name}`).join('|');
+  if (key !== mineKey) {
+    mineKey = key;
+    $('mine').replaceChildren(...list.map((s) => styleCard(s, true)));
+    $('mineEmpty').hidden = list.length > 0;
+    scheduleThumbs();
+  }
+  for (const el of document.querySelectorAll('.st')) el.classList.toggle('on', el.dataset.id === st.S?.style);
+}
+
+function pickStyle(e) {
+  if (e.target.classList.contains('more')) { openStyleMenu(e.target.closest('.st').dataset.id, e.clientX, e.clientY); return; }
   const el = e.target.closest('.st');
   if (!el || !st.S || st.S.style === el.dataset.id) return;
   st.S.style = el.dataset.id;
   syncUI(); redraw(); commit(`風格 ${styleById(st.S.style).name}`);
+}
+$('styles').addEventListener('click', pickStyle);
+$('mine').addEventListener('click', pickStyle);
+$('mine').addEventListener('contextmenu', (e) => {
+  const el = e.target.closest('.st.mine:not(.orphan)');
+  if (!el) return;
+  e.preventDefault();
+  openStyleMenu(el.dataset.id, e.clientX, e.clientY);
 });
+
+async function persistStyles() {
+  try { await lab.stylesWrite(getCustomStyles()); return true; } catch (e) { toast(`我的風格存不進去：${e.message}`, true); return false; }
+}
+
+// ---- 存成我的風格／重新命名 ----
+const ssDlg = $('saveStyleDlg');
+let ssMode = null; // { kind: 'new' } | { kind: 'rename', id }
+function openSaveStyle(mode) {
+  if (!st.S && mode.kind === 'new') return;
+  ssMode = mode;
+  const target = mode.kind === 'rename' ? styleById(mode.id) : null;
+  $('ssTitle').textContent = target ? `重新命名「${target.name}」` : '存成我的風格';
+  $('ssGroupsRow').hidden = !!target;
+  $('ssInfo').hidden = !!target;
+  $('ssGo').textContent = target ? '改名' : '儲存';
+  $('ssName').value = target ? target.name : '';
+  $('ssErr').textContent = '';
+  ssDlg.showModal();
+  $('ssName').focus();
+  $('ssName').select();
+}
+$('saveStyleBtn').onclick = () => openSaveStyle({ kind: 'new' });
+$('ssCancel').onclick = () => ssDlg.close();
+$('saveStyleForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const name = $('ssName').value.trim();
+  const others = getCustomStyles().filter((x) => ssMode.kind !== 'rename' || x.id !== ssMode.id);
+  if (!name) { $('ssErr').textContent = '請輸入名稱'; return; }
+  if (others.some((x) => x.name === name)) { $('ssErr').textContent = '已經有同名的風格，換個名字'; return; }
+  const list = getCustomStyles();
+  if (ssMode.kind === 'rename') {
+    const i = list.findIndex((x) => x.id === ssMode.id);
+    if (i < 0) { ssDlg.close(); return; }
+    list[i] = { ...list[i], name };
+  } else {
+    const groups = [$('ssWb').checked && 'wb', $('ssLight').checked && 'light', $('ssVig').checked && 'vignette'].filter(Boolean);
+    list.unshift(captureStyle(st.S, groups, name, Object.keys(ADJ)));
+  }
+  setCustomStyles(list);
+  ssDlg.close();
+  if (await persistStyles()) toast(ssMode.kind === 'rename' ? `已改名為「${name}」` : `已存成「${name}」，在「我的風格」裡`);
+  if (st.S) { syncUI(); scheduleSave(); }
+});
+
+// ---- 右鍵選單 ----
+const menu = $('ctxMenu');
+let menuId = null;
+function openStyleMenu(id, x, y) {
+  menuId = id;
+  menu.hidden = false;
+  const r = menu.getBoundingClientRect();
+  menu.style.left = Math.min(x, innerWidth - r.width - 8) + 'px';
+  menu.style.top = Math.min(y, innerHeight - r.height - 8) + 'px';
+}
+const closeMenu = () => { menu.hidden = true; };
+window.addEventListener('pointerdown', (e) => { if (!menu.hidden && !menu.contains(e.target)) closeMenu(); });
+window.addEventListener('blur', closeMenu);
+$('right').addEventListener('scroll', closeMenu);
+menu.addEventListener('click', async (e) => {
+  const act = e.target.dataset.act;
+  if (!act) return;
+  closeMenu();
+  const target = styleById(menuId);
+  if (!isCustomId(target.id) || target.orphan) return;
+  if (act === 'rename') openSaveStyle({ kind: 'rename', id: target.id });
+  else if (act === 'update') {
+    if (!st.S) { toast('先打開一張照片，調好之後再更新', true); return; }
+    if (!(await confirmBox(`用目前的調整更新「${target.name}」？`, '會用這張照片目前的色調取代原本的內容（包含的項目維持不變）。之前已經套用的照片不受影響。', '更新'))) return;
+    // 換新 id：用過舊版的照片靠自己設定檔裡的副本維持原樣
+    const list = getCustomStyles(), i = list.findIndex((x) => x.id === target.id);
+    if (i < 0) return;
+    list[i] = captureStyle(st.S, target.groups, target.name, Object.keys(ADJ));
+    setCustomStyles(list);
+    if (st.S.style === target.id) adoptOrphan(target);
+    if (await persistStyles()) toast(`已更新「${target.name}」`);
+    syncUI();
+  } else if (act === 'delete') {
+    if (!(await confirmBox(`刪除「${target.name}」？`, '已經套用這個風格的照片不受影響，打開時仍是原本的樣子（效果另外記在那張照片的設定裡）。', '刪除', true))) return;
+    setCustomStyles(getCustomStyles().filter((x) => x.id !== target.id));
+    if (st.S?.style === target.id) adoptOrphan(target);
+    if (await persistStyles()) toast(`已刪除「${target.name}」`);
+    if (st.S) syncUI(); else { mineKey = null; renderStyleGrids(); }
+  }
+});
+
+// ---- 確認框 ----
+const cfDlg = $('confirmDlg');
+let cfResolve = null;
+function confirmBox(title, text, okLabel, danger = false) {
+  $('cfTitle').textContent = title;
+  $('cfText').textContent = text;
+  $('cfGo').textContent = okLabel;
+  $('cfGo').classList.toggle('danger', danger);
+  cfDlg.showModal();
+  return new Promise((r) => { cfResolve = r; });
+}
+const cfDone = (v) => { if (cfDlg.open) cfDlg.close(); if (cfResolve) { cfResolve(v); cfResolve = null; } };
+$('cfCancel').onclick = () => cfDone(false);
+$('confirmForm').addEventListener('submit', (e) => { e.preventDefault(); cfDone(true); });
+cfDlg.addEventListener('cancel', () => cfDone(false));
+
+lab.stylesRead().then((list) => { setCustomStyles(list); renderStyleGrids(); }).catch((e) => lab.log(`styles-read: ${e}`));
 {
   const amt = $('amt');
   let before = 100;
@@ -352,12 +488,15 @@ function scheduleSave() {
   clearTimeout(st.saveTimer);
   st.saveTimer = setTimeout(flushSave, 400);
 }
+const stripOrphan = (d) => { const { orphan, ...rest } = d; return sanitizeCustomStyle(rest); };
 async function flushSave() {
   clearTimeout(st.saveTimer);
   if (!st.dirty || !st.path || !st.S) return;
   st.dirty = false;
   const data = isDefault(st.S, st.W, st.H) ? null
-    : { app: 'photo-lab', version: SCHEMA_VERSION, srcW: st.W, srcH: st.H, updated: new Date().toISOString(), settings: st.S };
+    : { app: 'photo-lab', version: SCHEMA_VERSION, srcW: st.W, srcH: st.H, updated: new Date().toISOString(), settings: st.S,
+      // 用了我的風格就連定義一起存，之後風格被改或刪，這張照片仍能維持原樣
+      ...(isCustomId(st.S.style) ? { styleDef: stripOrphan(styleById(st.S.style)) } : {}) };
   try { await lab.sidecarWrite(st.path, data); } catch (e) { toast(`調整設定存不進去：${e.message}`, true); }
 }
 
@@ -390,6 +529,7 @@ async function loadIndex(idx) {
     const W = img.width, H = img.height;
     const side = await lab.sidecarRead(path);
     if (token !== st.loadToken) return;
+    if (side?.styleDef) adoptOrphan(side.styleDef);
     let S = sanitize(side?.settings, W, H);
     if (side?.srcW && (side.srcW !== W || side.srcH !== H)) S.crop = scaleCrop(S.crop, side.srcW, side.srcH, W, H);
     else if (!fits(S.crop, S.crop, W, H)) fitCrop(S.crop, W, H);
@@ -399,7 +539,7 @@ async function loadIndex(idx) {
     st.histories.set(path, st.hist);
     if (st.histories.size > 30) st.histories.delete(st.histories.keys().next().value);
     $('empty').hidden = true; $('cw').hidden = false;
-    for (const id of ['cropBtn', 'baBtn', 'resetAll', 'exportBtn', 'autoAll', 'autoWb']) $(id).disabled = false;
+    for (const id of ['cropBtn', 'baBtn', 'resetAll', 'exportBtn', 'autoAll', 'autoWb', 'saveStyleBtn']) $(id).disabled = false;
     $('autoNote').textContent = '分析照片亮度分布與色偏，自動設定曝光、亮部、陰影、白色、黑色、白平衡';
     setCropMode(false);
     syncUI(); drawHistory(); updateHeader(path); renderInfo(); layout();

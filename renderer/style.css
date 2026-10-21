@@ -96,3 +96,24 @@ dialog h3{margin:0 0 14px;font-size:16px}
 #row_amt{margin-top:10px}
 #row_amt.off{opacity:.4;pointer-events:none}
 .desc{color:var(--t2);font-size:12px;min-height:36px}
+.subh{margin:12px 0 6px}
+.subh:first-child{margin-top:0}
+.mine-empty{color:#6f727a;font-size:12px;border:1px dashed var(--line);border-radius:8px;padding:10px;text-align:center}
+.savestyle{width:100%;margin-top:8px;border-style:dashed;color:var(--ac)}
+.st{position:relative}
+.st .more{position:absolute;top:6px;right:6px;background:#000b;border-radius:4px;padding:0 7px;display:none;font-size:13px;line-height:1.5}
+.st.mine:hover .more{display:block}
+.st.orphan span{color:var(--t2)}
+.chk{display:flex;flex-direction:column;gap:6px}
+.chk label{display:flex;gap:6px;align-items:flex-start;cursor:pointer}
+.chk small{color:var(--t2);display:block;font-size:11px}
+.chk input{margin-top:3px}
+#saveStyleDlg .f{align-items:start}
+#saveStyleDlg .f>span{padding-top:4px}
+.err{color:#ff6b6b;font-size:12px;min-height:18px;margin-top:4px}
+.btn.danger{border-color:#e5484d;color:#ff6b6b}
+.ctxmenu{position:fixed;z-index:20;width:190px;background:#111214;border:1px solid var(--line);border-radius:8px;padding:4px;box-shadow:0 8px 24px #000a}
+.ctxmenu div{padding:6px 10px;border-radius:4px;cursor:pointer}
+.ctxmenu div:hover{background:var(--p2)}
+.ctxmenu .danger{color:#ff6b6b}
+.ctxmenu hr{border:0;border-top:1px solid var(--line);margin:4px 0}

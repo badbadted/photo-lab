@@ -1,6 +1,6 @@
 // 調整項目定義、預設值、歷史紀錄（純邏輯，可在 node 測）
 import { defaultCrop, RATIOS } from './crop.js';
-import { STYLES } from './styles.js';
+import { allStyles } from './styles.js';
 
 // key: [最小, 最大, 預設, 名稱, 步進]
 export const ADJ = {
@@ -47,7 +47,7 @@ export function sanitize(raw, W, H) {
     const v = Number(raw[k]);
     if (Number.isFinite(v)) s[k] = Math.min(ADJ[k][1], Math.max(ADJ[k][0], v));
   }
-  if (STYLES.some((x) => x.id === raw.style)) s.style = raw.style;
+  if (allStyles().some((x) => x.id === raw.style)) s.style = raw.style;
   if (Number.isFinite(Number(raw.amt))) s.amt = Math.min(100, Math.max(0, Number(raw.amt)));
   const c = raw.crop;
   if (c && typeof c === 'object') {
