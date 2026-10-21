@@ -1,7 +1,7 @@
 // 照片解碼：RAW 走 LibRaw（WASM，在 Web Worker 裡跑），其餘交給 Chromium
-import LibRaw from './vendor/libraw/index.js?v=mvhpsqfc';
-import { readJpegExif, infoFromExif, infoFromLibRaw } from './exif.js?v=mvhpsqfc';
-import { shrinkRGB16 } from './raster.js?v=mvhpsqfc';
+import LibRaw from './vendor/libraw/index.js?v=mvhq2p4m';
+import { readJpegExif, infoFromExif, infoFromLibRaw } from './exif.js?v=mvhq2p4m';
+import { shrinkRGB16 } from './raster.js?v=mvhq2p4m';
 
 export const RAW_EXT = ['cr3', 'cr2', 'nef', 'arw', 'dng', 'raf', 'orf', 'rw2', 'pef', 'srw'];
 export const extOf = (p) => p.slice(p.lastIndexOf('.') + 1).toLowerCase();

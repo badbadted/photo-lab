@@ -1,6 +1,6 @@
 // 調整項目定義、預設值、歷史紀錄（純邏輯，可在 node 測）
-import { defaultCrop, validRatio } from './crop.js?v=mvhpsqfc';
-import { allStyles } from './styles.js?v=mvhpsqfc';
+import { defaultCrop, validRatio } from './crop.js?v=mvhq2p4m';
+import { allStyles } from './styles.js?v=mvhq2p4m';
 
 // key: [最小, 最大, 預設, 名稱, 步進]
 export const ADJ = {
